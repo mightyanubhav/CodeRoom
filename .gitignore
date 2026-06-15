@@ -1,0 +1,19 @@
+# Maven
+target/
+*.class
+*.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Spring Boot
+application-local.properties
+
+# Secrets — NEVER commit these
+application.properties
+
+# OS
+.DS_Store
+Thumbs.db
