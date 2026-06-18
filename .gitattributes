@@ -1,2 +1,9 @@
-/mvnw text eol=lf
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Force Unix line endings for shell scripts
+*.sh text eol=lf
+
+# Force Windows line endings for Windows scripts
 *.cmd text eol=crlf
+*.bat text eol=crlf
