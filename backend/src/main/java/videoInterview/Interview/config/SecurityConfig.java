@@ -26,76 +26,80 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    private final JwtAuthFilter jwtAuthFilter;
+        private final JwtAuthFilter jwtAuthFilter;
 
-    @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        http
-                // Disable CSRF — we use JWT, not sessions/cookies
-                .csrf(AbstractHttpConfigurer::disable)
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+        @Bean
+        public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+                http
+                                // Disable CSRF — we use JWT, not sessions/cookies
+                                .csrf(AbstractHttpConfigurer::disable)
+                                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
 
-                // Stateless — Spring will never create an HTTP session
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                                // Stateless — Spring will never create an HTTP session
+                                .sessionManagement(session -> session
+                                                .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
-                // Route rules
-                .authorizeHttpRequests(auth -> auth
-                        // Public routes — no token needed
-                        .requestMatchers(
-                                "/api/auth/register",
-                                "/api/auth/login",
-                                "/api/auth/refresh",
-                                "/swagger-ui.html",
-                                "/swagger-ui/**",
-                                "/api-docs/**")
-                        .permitAll()
+                                // Route rules
+                                .authorizeHttpRequests(auth -> auth
+                                                // Public routes — no token needed
+                                                .requestMatchers(
+                                                                "/api/auth/register",
+                                                                "/api/auth/login",
+                                                                "/api/auth/refresh",
+                                                                "/api/rooms/*/joined",
+                                                                "/api/rooms/*/left",
+                                                                "/api/rooms/*/sync",
+                                                                "/swagger-ui.html",
+                                                                "/swagger-ui/**",
+                                                                "/api-docs/**")
+                                                .permitAll()
 
-                        // Admin only
-                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                                                // Admin only
+                                                .requestMatchers("/api/admin/**").hasRole("ADMIN")
 
-                        // Interviewers only
-                        .requestMatchers(
-                                "/api/interviews/create",
-                                "/api/questions/**")
-                        .hasRole("INTERVIEWER")
+                                                // Interviewers only
+                                                .requestMatchers(
+                                                                "/api/interviews/create",
+                                                                "/api/questions/**")
+                                                .hasRole("INTERVIEWER")
 
-                        // Everything else needs a valid token
-                        .anyRequest().authenticated())
+                                                // Everything else needs a valid token
+                                                .anyRequest().authenticated())
 
-                // Plug in our JWT filter before Spring's default login filter
-                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+                                // Plug in our JWT filter before Spring's default login filter
+                                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
-        return http.build();
-    }
+                return http.build();
+        }
 
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
+        @Bean
+        public PasswordEncoder passwordEncoder() {
+                return new BCryptPasswordEncoder();
+        }
 
-    @Bean
-    public AuthenticationManager authenticationManager(
-            AuthenticationConfiguration config) throws Exception {
-        return config.getAuthenticationManager();
-    }
+        @Bean
+        public AuthenticationManager authenticationManager(
+                        AuthenticationConfiguration config) throws Exception {
+                return config.getAuthenticationManager();
+        }
 
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration config = new CorsConfiguration();
+        @Bean
+        public CorsConfigurationSource corsConfigurationSource() {
+                CorsConfiguration config = new CorsConfiguration();
 
-        // React dev server + production Vercel URL
-        config.setAllowedOrigins(List.of(
-                "http://localhost:5173", // Vite dev server
-                "http://localhost:3000", // fallback
-                "https://coderoom.vercel.app" // production later
-        ));
+                // React dev server + production Vercel URL
+                config.setAllowedOrigins(List.of(
+                                "http://localhost:5173", // Vite dev server
+                                "http://localhost:3000", // fallback
+                                "https://coderoom.vercel.app" // production later
+                ));
 
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("*"));
-        config.setAllowCredentials(true);
+                config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+                config.setAllowedHeaders(List.of("*"));
+                config.setAllowCredentials(true);
 
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/api/**", config);
-        return source;
-    }
+                UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+                source.registerCorsConfiguration("/api/**", config);
+                return source;
+        }
 }
