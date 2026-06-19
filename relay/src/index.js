@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import { verifySocketToken } from './middleware/authMiddleware.js';
 import { roomHandler } from './handlers/roomHandler.js';
 import { editorHandler } from './handlers/editorHandler.js';
+import { webrtcHandler } from './handlers/webrtcHandler.js'; 
 
 dotenv.config();
 
@@ -56,7 +57,7 @@ io.on('connection', (socket) => {
     // Register all handlers for this socket
     roomHandler(io, socket);
     editorHandler(io, socket);
-
+    webrtcHandler(io, socket);
     // ─── Ping/Pong — keep connection alive ───────────────────────────────────
     socket.on('ping', () => {
         socket.emit('pong', { timestamp: new Date().toISOString() });
