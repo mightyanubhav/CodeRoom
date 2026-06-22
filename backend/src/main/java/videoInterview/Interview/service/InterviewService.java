@@ -6,6 +6,7 @@ import org.springframework.transaction.annotation.Transactional;
 import videoInterview.Interview.dto.interview.CreateInterviewRequest;
 import videoInterview.Interview.dto.interview.InterviewResponse;
 import videoInterview.Interview.entity.Interview;
+import videoInterview.Interview.entity.Room;
 import videoInterview.Interview.entity.User;
 import videoInterview.Interview.repository.InterviewRepository;
 import videoInterview.Interview.repository.RoomRepository;
@@ -13,7 +14,6 @@ import videoInterview.Interview.repository.UserRepository;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -23,22 +23,18 @@ public class InterviewService {
     private final InterviewRepository interviewRepository;
     private final UserRepository userRepository;
     private final RoomRepository roomRepository;
-    // ─── Create Interview (Interviewer only) ──────────────────────────────────
 
+    // ─── Create Interview (Interviewer only) ──────────────────────────────────
     @Transactional
     public InterviewResponse createInterview(String interviewerId, CreateInterviewRequest request) {
 
-        // 1. Load interviewer
         User interviewer = userRepository.findById(interviewerId)
                 .orElseThrow(() -> new RuntimeException("Interviewer not found"));
 
-        // 2. Generate unique room link
-        String roomId = UUID.randomUUID().toString();
-
-        // 3. Build interview
+        // Create interview with placeholder roomId first
         Interview interview = Interview.builder()
                 .interviewer(interviewer)
-                .roomId(roomId)
+                .roomId("pending")
                 .status(Interview.Status.SCHEDULED)
                 .scheduledAt(request.getScheduledAt())
                 .build();
@@ -47,7 +43,6 @@ public class InterviewService {
 
         return toResponse(interview);
     }
-
     // ─── Candidate joins via room link ────────────────────────────────────────
 
     @Transactional
@@ -149,15 +144,9 @@ public class InterviewService {
     // ─── Map entity to response DTO ───────────────────────────────────────────
 
     private InterviewResponse toResponse(Interview interview) {
-        // Find the actual Room entity id for this interview
-        String actualRoomId = roomRepository
-                .findByInterviewId(interview.getId())
-                .map(room -> room.getId())
-                .orElse(interview.getRoomId()); // fallback to interview roomId
-
         return InterviewResponse.builder()
                 .id(interview.getId())
-                .roomId(actualRoomId) // ← now returns Room entity id
+                .roomId(interview.getRoomId())
                 .status(interview.getStatus().name())
                 .scheduledAt(interview.getScheduledAt())
                 .startedAt(interview.getStartedAt())
@@ -167,5 +156,20 @@ public class InterviewService {
                 .interviewerName(interview.getInterviewer().getName())
                 .candidateName(interview.getCandidate() != null ? interview.getCandidate().getName() : null)
                 .build();
+    }
+
+    public InterviewResponse getByRoomEntityId(String roomEntityId) {
+        Room room = roomRepository.findById(roomEntityId)
+                .orElseThrow(() -> new RuntimeException("Room not found"));
+        return toResponse(room.getInterview());
+    }
+
+    @Transactional
+    public InterviewResponse updateRoomId(String interviewId, String roomId) {
+        Interview interview = interviewRepository.findById(interviewId)
+                .orElseThrow(() -> new RuntimeException("Interview not found"));
+        interview.setRoomId(roomId);
+        interviewRepository.save(interview);
+        return toResponse(interview);
     }
 }

@@ -62,10 +62,21 @@ const InterviewRoom = () => {
     const socket = initSocket(accessToken);
 
     // Room events
-    socket.on(SOCKET_EVENTS.ROOM_STATE, (state) => {
+    socket.on(SOCKET_EVENTS.ROOM_STATE, async (state) => {
       setRoomState(state);
       setIsConnected(true);
       toast.success("Connected to room");
+
+      const { user } = useAuthStore.getState();
+      if (user?.role === "CANDIDATE") {
+        try {
+          // roomId from URL = room.id = interview.roomId (same UUID now)
+          await interviewAPI.join(roomId);
+          console.log("✅ Interview status → IN_PROGRESS");
+        } catch (err) {
+          console.log("Join interview:", err.message);
+        }
+      }
     });
 
     socket.on(SOCKET_EVENTS.ROOM_USER_JOINED, (data) => {

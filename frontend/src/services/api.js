@@ -81,8 +81,9 @@ export const interviewAPI = {
     score: (roomId, data) => api.post(`/api/interviews/score/${roomId}`, data),
     getMyInterviews: () => api.get('/api/interviews/my'),
     getByRoom: (roomId) => api.get(`/api/interviews/room/${roomId}`),
+    getByRoomEntityId: (roomEntityId) => api.get(`/api/interviews/by-room-entity/${roomEntityId}`),
+    updateRoomId: (interviewId, roomId) => api.patch(`/api/interviews/${interviewId}/room-id`, { roomId }),
 };
-
 // ─── Question endpoints ───────────────────────────────────────────────────────
 
 export const questionAPI = {

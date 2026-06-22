@@ -49,6 +49,9 @@ public class SecurityConfig {
                                                                 "/api/rooms/*/joined",
                                                                 "/api/rooms/*/left",
                                                                 "/api/rooms/*/sync",
+                                                                "/api/rooms/*/reset",
+                                                                "/api/interviews/by-room-entity/*",
+                                                                "/api/interviews/*/room-id", 
                                                                 "/swagger-ui.html",
                                                                 "/swagger-ui/**",
                                                                 "/api-docs/**")
@@ -94,7 +97,7 @@ public class SecurityConfig {
                                 "https://coderoom.vercel.app" // production later
                 ));
 
-                config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+                config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
                 config.setAllowedHeaders(List.of("*"));
                 config.setAllowCredentials(true);
 

@@ -13,6 +13,7 @@ import videoInterview.Interview.dto.interview.ScoreRequest;
 import videoInterview.Interview.service.InterviewService;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/interviews")
@@ -26,8 +27,7 @@ public class InterviewController {
     @PreAuthorize("hasRole('INTERVIEWER')")
     public ResponseEntity<InterviewResponse> create(
             @AuthenticationPrincipal String interviewerId,
-            @Valid @RequestBody CreateInterviewRequest request
-    ) {
+            @Valid @RequestBody CreateInterviewRequest request) {
         InterviewResponse response = interviewService.createInterview(interviewerId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
@@ -37,8 +37,7 @@ public class InterviewController {
     @PreAuthorize("hasRole('CANDIDATE')")
     public ResponseEntity<InterviewResponse> join(
             @AuthenticationPrincipal String candidateId,
-            @PathVariable String roomId
-    ) {
+            @PathVariable String roomId) {
         InterviewResponse response = interviewService.joinInterview(roomId, candidateId);
         return ResponseEntity.ok(response);
     }
@@ -48,8 +47,7 @@ public class InterviewController {
     @PreAuthorize("hasRole('INTERVIEWER')")
     public ResponseEntity<InterviewResponse> end(
             @AuthenticationPrincipal String interviewerId,
-            @PathVariable String roomId
-    ) {
+            @PathVariable String roomId) {
         InterviewResponse response = interviewService.endInterview(roomId, interviewerId);
         return ResponseEntity.ok(response);
     }
@@ -60,14 +58,12 @@ public class InterviewController {
     public ResponseEntity<InterviewResponse> score(
             @AuthenticationPrincipal String interviewerId,
             @PathVariable String roomId,
-            @Valid @RequestBody ScoreRequest request
-    ) {
+            @Valid @RequestBody ScoreRequest request) {
         InterviewResponse response = interviewService.submitScore(
                 roomId,
                 interviewerId,
                 request.getScore(),
-                request.getNotes()
-        );
+                request.getNotes());
         return ResponseEntity.ok(response);
     }
 
@@ -75,8 +71,7 @@ public class InterviewController {
     @GetMapping("/my")
     @PreAuthorize("hasRole('INTERVIEWER')")
     public ResponseEntity<List<InterviewResponse>> getMyInterviews(
-            @AuthenticationPrincipal String interviewerId
-    ) {
+            @AuthenticationPrincipal String interviewerId) {
         List<InterviewResponse> response = interviewService.getMyInterviews(interviewerId);
         return ResponseEntity.ok(response);
     }
@@ -85,6 +80,22 @@ public class InterviewController {
     @GetMapping("/room/{roomId}")
     public ResponseEntity<InterviewResponse> getByRoom(@PathVariable String roomId) {
         InterviewResponse response = interviewService.getByRoomId(roomId);
+        return ResponseEntity.ok(response);
+    }
+
+    // GET /api/interviews/by-room-entity/{roomEntityId}
+    @GetMapping("/by-room-entity/{roomEntityId}")
+    public ResponseEntity<InterviewResponse> getByRoomEntityId(
+            @PathVariable String roomEntityId) {
+        InterviewResponse response = interviewService.getByRoomEntityId(roomEntityId);
+        return ResponseEntity.ok(response);
+    }
+
+    @PatchMapping("/{interviewId}/room-id")
+    public ResponseEntity<InterviewResponse> updateRoomId(
+            @PathVariable String interviewId,
+            @RequestBody Map<String, String> body) {
+        InterviewResponse response = interviewService.updateRoomId(interviewId, body.get("roomId"));
         return ResponseEntity.ok(response);
     }
 }
