@@ -8,6 +8,7 @@ import videoInterview.Interview.dto.interview.InterviewResponse;
 import videoInterview.Interview.entity.Interview;
 import videoInterview.Interview.entity.User;
 import videoInterview.Interview.repository.InterviewRepository;
+import videoInterview.Interview.repository.RoomRepository;
 import videoInterview.Interview.repository.UserRepository;
 
 import java.time.LocalDateTime;
@@ -21,7 +22,7 @@ public class InterviewService {
 
     private final InterviewRepository interviewRepository;
     private final UserRepository userRepository;
-
+    private final RoomRepository roomRepository;
     // ─── Create Interview (Interviewer only) ──────────────────────────────────
 
     @Transactional
@@ -148,9 +149,15 @@ public class InterviewService {
     // ─── Map entity to response DTO ───────────────────────────────────────────
 
     private InterviewResponse toResponse(Interview interview) {
+        // Find the actual Room entity id for this interview
+        String actualRoomId = roomRepository
+                .findByInterviewId(interview.getId())
+                .map(room -> room.getId())
+                .orElse(interview.getRoomId()); // fallback to interview roomId
+
         return InterviewResponse.builder()
                 .id(interview.getId())
-                .roomId(interview.getRoomId())
+                .roomId(actualRoomId) // ← now returns Room entity id
                 .status(interview.getStatus().name())
                 .scheduledAt(interview.getScheduledAt())
                 .startedAt(interview.getStartedAt())

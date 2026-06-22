@@ -48,6 +48,7 @@ export const roomHandler = (io, socket) => {
       await addParticipant(roomId, socket.userId, socket.id);
 
       // 4. Get or initialize room state from Redis
+      // 4. Get or initialize room state from Redis
       let roomState = await getRoomState(roomId);
       if (!roomState) {
         // First person joining — fetch from Spring Boot
@@ -56,15 +57,37 @@ export const roomHandler = (io, socket) => {
             Authorization: `Bearer ${getRawToken(socket)}`,
           },
         });
+
+        // Check room is not closed
+        if (response.data.status === "CLOSED") {
+          socket.emit("room:error", { message: "This interview has ended" });
+          socket.leave(roomId);
+          return;
+        }
+
+        // Check room is not completed
+        if (response.data.status === "COMPLETED") {
+          socket.emit("room:error", { message: "This interview has ended" });
+          socket.leave(roomId);
+          return;
+        }
+
         roomState = {
           roomId,
           currentCode: response.data.currentCode || "",
           language: response.data.language || "JAVASCRIPT",
+          status: response.data.status,
           participants: {},
         };
         await setRoomState(roomId, roomState);
       }
 
+      // Also check cached room state status
+      if (roomState.status === "CLOSED" || roomState.status === "COMPLETED") {
+        socket.emit("room:error", { message: "This interview has ended" });
+        socket.leave(roomId);
+        return;
+      }
       // 5. Tell Spring Boot a participant joined
       await axios.post(
         `${SPRING_URL}/api/rooms/${roomId}/joined`,

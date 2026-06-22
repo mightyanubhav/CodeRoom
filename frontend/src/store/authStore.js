@@ -2,10 +2,20 @@ import { create } from 'zustand';
 import { authAPI } from '../services/api.js';
 import { initSocket, disconnectSocket } from '../services/socket.js';
 
+// Helper — parse user from stored token
+const getUserFromStorage = () => {
+    try {
+        const user = localStorage.getItem('user');
+        return user ? JSON.parse(user) : null;
+    } catch {
+        return null;
+    }
+};
+
 const useAuthStore = create((set, get) => ({
 
     // ─── State ────────────────────────────────────────────────────────────────
-    user: null,
+    user: getUserFromStorage(),
     accessToken: localStorage.getItem('accessToken') || null,
     refreshToken: localStorage.getItem('refreshToken') || null,
     isAuthenticated: !!localStorage.getItem('accessToken'),
@@ -19,15 +29,18 @@ const useAuthStore = create((set, get) => ({
             const response = await authAPI.register({ name, email, password, role });
             const { accessToken, refreshToken, userId, email: userEmail, role: userRole } = response.data;
 
+            const user = { id: userId, email: userEmail, role: userRole };
+
             // Save to localStorage
             localStorage.setItem('accessToken', accessToken);
             localStorage.setItem('refreshToken', refreshToken);
+            localStorage.setItem('user', JSON.stringify(user));
 
-            // Initialize socket connection
+            // Initialize socket
             initSocket(accessToken);
 
             set({
-                user: { id: userId, email: userEmail, role: userRole },
+                user,
                 accessToken,
                 refreshToken,
                 isAuthenticated: true,
@@ -51,15 +64,18 @@ const useAuthStore = create((set, get) => ({
             const response = await authAPI.login({ email, password });
             const { accessToken, refreshToken, userId, email: userEmail, role: userRole } = response.data;
 
+            const user = { id: userId, email: userEmail, role: userRole };
+
             // Save to localStorage
             localStorage.setItem('accessToken', accessToken);
             localStorage.setItem('refreshToken', refreshToken);
+            localStorage.setItem('user', JSON.stringify(user));
 
-            // Initialize socket connection
+            // Initialize socket
             initSocket(accessToken);
 
             set({
-                user: { id: userId, email: userEmail, role: userRole },
+                user,
                 accessToken,
                 refreshToken,
                 isAuthenticated: true,
@@ -92,7 +108,7 @@ const useAuthStore = create((set, get) => ({
     // ─── Clear error ──────────────────────────────────────────────────────────
     clearError: () => set({ error: null }),
 
-    // ─── Get user role ────────────────────────────────────────────────────────
+    // ─── Helpers ──────────────────────────────────────────────────────────────
     isInterviewer: () => get().user?.role === 'INTERVIEWER',
     isCandidate: () => get().user?.role === 'CANDIDATE',
 
