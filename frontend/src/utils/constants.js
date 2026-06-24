@@ -32,28 +32,29 @@ export const ROOM_STATUS = {
 
 export const SOCKET_EVENTS = {
     // Room
-    ROOM_JOIN:          'room:join',
-    ROOM_LEAVE:         'room:leave',
-    ROOM_STATE:         'room:state',
-    ROOM_USER_JOINED:   'room:user_joined',
-    ROOM_USER_LEFT:     'room:user_left',
-    ROOM_ERROR:         'room:error',
-    ROOM_CLOSED:        'room:closed',
-    ROOM_LANGUAGE_CHANGE: 'room:language_change',
+    ROOM_JOIN:             'room:join',
+    ROOM_LEAVE:            'room:leave',
+    ROOM_CLOSE:            'room:close',       // ← ADD THIS
+    ROOM_STATE:            'room:state',
+    ROOM_USER_JOINED:      'room:user_joined',
+    ROOM_USER_LEFT:        'room:user_left',
+    ROOM_ERROR:            'room:error',
+    ROOM_CLOSED:           'room:closed',
+    ROOM_LANGUAGE_CHANGE:  'room:language_change',
     ROOM_LANGUAGE_CHANGED: 'room:language_changed',
 
     // Editor
-    EDITOR_CODE_CHANGE:      'editor:code_change',
-    EDITOR_CODE_CHANGED:     'editor:code_changed',
-    EDITOR_CURSOR_MOVE:      'editor:cursor_move',
-    EDITOR_CURSOR_MOVED:     'editor:cursor_moved',
-    EDITOR_RUN_CODE:         'editor:run_code',
+    EDITOR_CODE_CHANGE:       'editor:code_change',
+    EDITOR_CODE_CHANGED:      'editor:code_changed',
+    EDITOR_CURSOR_MOVE:       'editor:cursor_move',
+    EDITOR_CURSOR_MOVED:      'editor:cursor_moved',
+    EDITOR_RUN_CODE:          'editor:run_code',
     EDITOR_EXECUTION_STARTED: 'editor:execution_started',
     EDITOR_EXECUTION_RESULT:  'editor:execution_result',
-    EDITOR_AUTO_SAVE:        'editor:auto_save',
-    EDITOR_SAVED:            'editor:saved',
-    EDITOR_LOAD_QUESTION:    'editor:load_question',
-    EDITOR_QUESTION_LOADED:  'editor:question_loaded',
+    EDITOR_AUTO_SAVE:         'editor:auto_save',
+    EDITOR_SAVED:             'editor:saved',
+    EDITOR_LOAD_QUESTION:     'editor:load_question',
+    EDITOR_QUESTION_LOADED:   'editor:question_loaded',
 
     // WebRTC
     WEBRTC_OFFER:         'webrtc:offer',

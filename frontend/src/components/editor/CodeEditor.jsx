@@ -9,7 +9,6 @@ import { oneDark } from '@codemirror/theme-one-dark';
 import { EditorView } from '@codemirror/view';
 import { LANGUAGES } from '../../utils/constants.js';
 
-// Language extension map
 const getLanguageExtension = (language) => {
     switch (language) {
         case 'JAVASCRIPT': return javascript({ jsx: false });
@@ -21,95 +20,69 @@ const getLanguageExtension = (language) => {
     }
 };
 
-// Custom theme overrides
 const customTheme = EditorView.theme({
-    '&': {
-        height: '100%',
-        fontSize: '14px',
-        backgroundColor: '#1e1e1e',
-    },
+    '&': { height: '100%', fontSize: '14px', backgroundColor: '#1e1e1e' },
     '.cm-scroller': {
-        fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+        fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
         lineHeight: '1.6',
         overflow: 'auto',
     },
-    '.cm-content': {
-        padding: '16px 0',
-        caretColor: '#aeafad',
-    },
-    '.cm-line': {
-        padding: '0 16px',
-    },
+    '.cm-content': { padding: '16px 0', caretColor: '#aeafad' },
+    '.cm-line': { padding: '0 16px' },
     '.cm-gutters': {
         backgroundColor: '#1e1e1e',
         borderRight: '1px solid #3e3e42',
         color: '#858585',
         minWidth: '48px',
     },
-    '.cm-activeLineGutter': {
-        backgroundColor: '#2a2d2e',
-    },
-    '.cm-activeLine': {
-        backgroundColor: '#2a2d2e',
-    },
-    '.cm-cursor': {
-        borderLeftColor: '#aeafad',
-        borderLeftWidth: '2px',
-    },
-    '.cm-selectionBackground': {
-        backgroundColor: '#264f78 !important',
-    },
-    '&.cm-focused .cm-selectionBackground': {
-        backgroundColor: '#264f78 !important',
-    },
-    '.cm-matchingBracket': {
-        backgroundColor: '#3b3b3b',
-        outline: '1px solid #888',
-    },
+    '.cm-activeLineGutter': { backgroundColor: '#2a2d2e' },
+    '.cm-activeLine': { backgroundColor: '#2a2d2e' },
+    '.cm-cursor': { borderLeftColor: '#aeafad', borderLeftWidth: '2px' },
+    '.cm-selectionBackground': { backgroundColor: '#264f78 !important' },
+    '&.cm-focused .cm-selectionBackground': { backgroundColor: '#264f78 !important' },
 });
 
 const CodeEditor = ({ code, language, onChange, isRemoteChange }) => {
     const editorViewRef = useRef(null);
     const isRemoteChangeRef = useRef(false);
-    const lastRemoteCodeRef = useRef(code);
 
-    // Handle remote code changes without disrupting cursor
+    // ─── Apply remote code change to editor ───────────────────────────────────
     useEffect(() => {
         if (!isRemoteChange) return;
         if (!editorViewRef.current) return;
-        if (lastRemoteCodeRef.current === code) return;
-
-        lastRemoteCodeRef.current = code;
-        isRemoteChangeRef.current = true;
 
         const view = editorViewRef.current;
         const currentDoc = view.state.doc.toString();
 
-        if (currentDoc === code) {
-            isRemoteChangeRef.current = false;
-            return;
-        }
+        // Skip if already same
+        if (currentDoc === code) return;
 
-        // Get current cursor position
+        // Flag as remote so onChange doesn't fire back to relay
+        isRemoteChangeRef.current = true;
+
+        // Save cursor
         const selection = view.state.selection;
 
-        // Apply change
+        // Apply full replacement
         view.dispatch({
             changes: {
                 from: 0,
                 to: currentDoc.length,
-                insert: code,
+                insert: code || '',
             },
-            // Preserve cursor position
-            selection: selection,
+            selection,
+            // Prevent this from triggering onChange
+            annotations: [],
         });
 
-        isRemoteChangeRef.current = false;
+        // Reset flag after tick
+        setTimeout(() => {
+            isRemoteChangeRef.current = false;
+        }, 0);
 
-    }, [code, isRemoteChange]);
+    }, [code, isRemoteChange]); // ← runs every time isRemoteChange flips to true
 
     const handleChange = useCallback((value) => {
-        // Don't propagate remote changes back
         if (isRemoteChangeRef.current) return;
         onChange(value);
     }, [onChange]);
@@ -120,7 +93,6 @@ const CodeEditor = ({ code, language, onChange, isRemoteChange }) => {
 
     return (
         <div className="flex-1 overflow-hidden flex flex-col bg-[#1e1e1e]">
-            {/* Tab bar */}
             <div className="bg-[#252526] border-b border-[#3e3e42] px-4 py-1.5 flex items-center gap-3 shrink-0">
                 <div className="flex items-center gap-2 bg-[#1e1e1e] px-3 py-1 rounded-t border-t-2 border-t-[#238636]">
                     <div className="w-2 h-2 rounded-full bg-[#238636]"/>
@@ -129,8 +101,6 @@ const CodeEditor = ({ code, language, onChange, isRemoteChange }) => {
                     </span>
                 </div>
             </div>
-
-            {/* CodeMirror editor */}
             <div className="flex-1 overflow-hidden">
                 <CodeMirror
                     value={code}
@@ -146,23 +116,16 @@ const CodeEditor = ({ code, language, onChange, isRemoteChange }) => {
                     basicSetup={{
                         lineNumbers: true,
                         highlightActiveLineGutter: true,
-                        highlightSpecialChars: true,
                         history: true,
                         foldGutter: false,
                         drawSelection: true,
-                        dropCursor: true,
-                        allowMultipleSelections: false,
                         indentOnInput: true,
                         syntaxHighlighting: true,
                         bracketMatching: true,
-                        closeBrackets: true,        // ← no autoclosing
-                        autocompletion: true,        // ← no autocomplete
-                        rectangularSelection: false,
-                        crosshairCursor: false,
+                        closeBrackets: false,
+                        autocompletion: false,
                         highlightActiveLine: true,
                         highlightSelectionMatches: true,
-                        closeBracketsKeymap: false,
-                        completionKeymap: false,
                     }}
                     style={{ height: '100%' }}
                 />

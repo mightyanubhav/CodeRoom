@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import useAuthStore from "../../store/authStore.js";
 import { interviewAPI, roomAPI } from "../../services/api.js";
 import { INTERVIEW_STATUS } from "../../utils/constants.js";
+import ScoreModal from "../../components/room/ScoreModal.jsx";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -14,6 +15,8 @@ const Dashboard = () => {
   const [isCreating, setIsCreating] = useState(false);
   const [scheduledAt, setScheduledAt] = useState("");
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showDashboardScoreModal, setShowDashboardScoreModal] = useState(false);
+  const [selectedInterview, setSelectedInterview] = useState(null);
 
   // ─── Fetch interviews on mount ─────────────────────────────────────────────
 
@@ -145,15 +148,12 @@ const Dashboard = () => {
   };
 
   // ─── Format date ───────────────────────────────────────────────────────────
-  const formatDate = (dateStr) => {
-    if (!dateStr) return "—";
-    return new Date(dateStr).toLocaleString("en-IN", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+  const formatDuration = (startedAt, endedAt) => {
+    if (!startedAt || !endedAt) return null;
+    const start = new Date(startedAt);
+    const end = new Date(endedAt);
+    const minutes = Math.round((end - start) / 60000);
+    return `${minutes} min`;
   };
 
   return (
@@ -294,22 +294,48 @@ const Dashboard = () => {
                         </span>
                       )}
                     </div>
-                    <p className="text-sm text-[#8b949e]">
-                      {formatDate(interview.scheduledAt)}
-                    </p>
+                    {interview.startedAt && interview.endedAt && (
+                      <span className="text-xs text-[#484f58]">
+                        ⏱{" "}
+                        {formatDuration(interview.startedAt, interview.endedAt)}
+                      </span>
+                    )}
+
+                    {/* Score display */}
                     {interview.score && (
-                      <p className="text-xs text-[#8b949e] mt-0.5">
-                        Score:{" "}
-                        <span className="text-[#3fb950]">
+                      <div className="flex items-center gap-2 mt-1">
+                        <span
+                          className={`text-sm font-bold ${
+                            interview.score >= 7
+                              ? "text-[#3fb950]"
+                              : interview.score >= 5
+                                ? "text-[#d29922]"
+                                : "text-[#f85149]"
+                          }`}
+                        >
                           {interview.score}/10
                         </span>
+                        <span className="text-xs text-[#8b949e]">
+                          {interview.score >= 7
+                            ? "✅ Proceed"
+                            : interview.score >= 5
+                              ? "⚠️ Consider"
+                              : "❌ Reject"}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Notes preview */}
+                    {interview.notes && (
+                      <p className="text-xs text-[#484f58] mt-1 max-w-xs truncate">
+                        "{interview.notes}"
                       </p>
                     )}
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {/* Copy room link — share with candidate */}
+                  {/* Copy room link */}
                   <button
                     onClick={() => {
                       navigator.clipboard.writeText(
@@ -322,7 +348,7 @@ const Dashboard = () => {
                     Copy Link
                   </button>
 
-                  {/* Join room — interviewer enters the room */}
+                  {/* Join room */}
                   {interview.status !== INTERVIEW_STATUS.COMPLETED &&
                     interview.status !== INTERVIEW_STATUS.REVIEWED &&
                     interview.status !== INTERVIEW_STATUS.CANCELLED && (
@@ -333,12 +359,41 @@ const Dashboard = () => {
                         Join Room
                       </button>
                     )}
+
+                  {/* Submit score — if completed but not reviewed */}
+                  {interview.status === INTERVIEW_STATUS.COMPLETED && (
+                    <button
+                      onClick={() => {
+                        setSelectedInterview(interview);
+                        setShowDashboardScoreModal(true);
+                      }}
+                      className="text-xs bg-[#238636] hover:bg-[#2ea043] text-white px-3 py-1.5 rounded-lg transition-colors font-medium"
+                    >
+                      Submit Score
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+      {/* Score modal from dashboard */}
+      {showDashboardScoreModal && selectedInterview && (
+        <ScoreModal
+          roomId={selectedInterview.roomId}
+          candidateName={selectedInterview.candidateName || "Candidate"}
+          onClose={() => {
+            setShowDashboardScoreModal(false);
+            setSelectedInterview(null);
+          }}
+          onSubmitted={() => {
+            setShowDashboardScoreModal(false);
+            setSelectedInterview(null);
+            fetchInterviews();
+          }}
+        />
+      )}
     </div>
   );
 };

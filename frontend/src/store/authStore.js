@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { authAPI } from '../services/api.js';
 import { initSocket, disconnectSocket } from '../services/socket.js';
 
-// Helper — parse user from stored token
 const getUserFromStorage = () => {
     try {
         const user = localStorage.getItem('user');
@@ -31,12 +30,10 @@ const useAuthStore = create((set, get) => ({
 
             const user = { id: userId, email: userEmail, role: userRole };
 
-            // Save to localStorage
             localStorage.setItem('accessToken', accessToken);
             localStorage.setItem('refreshToken', refreshToken);
             localStorage.setItem('user', JSON.stringify(user));
 
-            // Initialize socket
             initSocket(accessToken);
 
             set({
@@ -66,12 +63,10 @@ const useAuthStore = create((set, get) => ({
 
             const user = { id: userId, email: userEmail, role: userRole };
 
-            // Save to localStorage
             localStorage.setItem('accessToken', accessToken);
             localStorage.setItem('refreshToken', refreshToken);
             localStorage.setItem('user', JSON.stringify(user));
 
-            // Initialize socket
             initSocket(accessToken);
 
             set({
@@ -103,6 +98,13 @@ const useAuthStore = create((set, get) => ({
             isAuthenticated: false,
             error: null,
         });
+    },
+
+    // ─── Update token after refresh ───────────────────────────────────────────
+    updateToken: (newAccessToken) => {
+        localStorage.setItem('accessToken', newAccessToken);
+        set({ accessToken: newAccessToken });
+        initSocket(newAccessToken);
     },
 
     // ─── Clear error ──────────────────────────────────────────────────────────

@@ -1,8 +1,6 @@
 import axios from 'axios';
 import { API_URL } from '../utils/constants.js';
 
-// ─── Axios instance ───────────────────────────────────────────────────────────
-
 const api = axios.create({
     baseURL: API_URL,
     headers: {
@@ -10,8 +8,7 @@ const api = axios.create({
     },
 });
 
-// ─── Request interceptor — attach token to every request ──────────────────────
-// Same concept as axios interceptors you know from Node.js
+// ─── Request interceptor ──────────────────────────────────────────────────────
 
 api.interceptors.request.use(
     (config) => {
@@ -24,19 +21,25 @@ api.interceptors.request.use(
     (error) => Promise.reject(error)
 );
 
-// ─── Response interceptor — handle token expiry ───────────────────────────────
+// ─── Response interceptor ─────────────────────────────────────────────────────
 
 api.interceptors.response.use(
     (response) => response,
     async (error) => {
         const originalRequest = error.config;
 
-        // If 401 and not already retrying — try refresh token
         if (error.response?.status === 401 && !originalRequest._retry) {
             originalRequest._retry = true;
 
             try {
                 const refreshToken = localStorage.getItem('refreshToken');
+
+                if (!refreshToken) {
+                    localStorage.clear();
+                    window.location.href = '/login';
+                    return Promise.reject(error);
+                }
+
                 const response = await axios.post(
                     `${API_URL}/api/auth/refresh`,
                     {},
@@ -44,14 +47,19 @@ api.interceptors.response.use(
                 );
 
                 const newAccessToken = response.data.accessToken;
+
+                // Update localStorage
                 localStorage.setItem('accessToken', newAccessToken);
 
-                // Retry original request with new token
+                // Update authStore + reinitialize socket with new token
+                const { default: useAuthStore } = await import('../store/authStore.js');
+                useAuthStore.getState().updateToken(newAccessToken);
+
+                // Retry original request
                 originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
                 return api(originalRequest);
 
             } catch (refreshError) {
-                // Refresh failed — logout user
                 localStorage.clear();
                 window.location.href = '/login';
                 return Promise.reject(refreshError);
@@ -84,6 +92,7 @@ export const interviewAPI = {
     getByRoomEntityId: (roomEntityId) => api.get(`/api/interviews/by-room-entity/${roomEntityId}`),
     updateRoomId: (interviewId, roomId) => api.patch(`/api/interviews/${interviewId}/room-id`, { roomId }),
 };
+
 // ─── Question endpoints ───────────────────────────────────────────────────────
 
 export const questionAPI = {

@@ -19,6 +19,7 @@ import { SOCKET_EVENTS, LANGUAGES } from "../../utils/constants.js";
 import CodeEditor from "../../components/editor/CodeEditor.jsx";
 import VideoPanel from "../../components/video/VideoPanel.jsx";
 import RoomControls from "../../components/room/RoomControls.jsx";
+import ScoreModal from "../../components/room/ScoreModal.jsx";
 
 const InterviewRoom = () => {
   const { roomId } = useParams();
@@ -49,6 +50,9 @@ const InterviewRoom = () => {
   const autoSaveRef = useRef(null);
   const codeRef = useRef(currentCode);
   const debounceRef = useRef(null);
+  const [showScoreModal, setShowScoreModal] = useState(false);
+  const [interviewRoomId, setInterviewRoomId] = useState(null);
+  const showScoreModalRef = useRef(false);
 
   // Keep codeRef in sync
   useEffect(() => {
@@ -92,6 +96,7 @@ const InterviewRoom = () => {
     });
 
     socket.on(SOCKET_EVENTS.ROOM_CLOSED, () => {
+      if (showScoreModalRef.current) return; // ← interviewer has modal open
       toast.error("Interview ended");
       navigate("/dashboard");
     });
@@ -149,7 +154,6 @@ const InterviewRoom = () => {
     return () => {
       clearInterval(autoSaveRef.current);
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      leaveRoom(roomId);
       resetRoom();
       socket.off(SOCKET_EVENTS.ROOM_STATE);
       socket.off(SOCKET_EVENTS.ROOM_USER_JOINED);
@@ -185,14 +189,38 @@ const InterviewRoom = () => {
   };
 
   // ─── End interview ────────────────────────────────────────────────────────
+  //   const handleEndInterview = async () => {
+  //     try {
+  //       const response = await interviewAPI.end(roomId); // ← capture response
+  //       setInterviewRoomId(response.data.roomId);
+  //       setShowScoreModal(true);
+  //       toast.success("Interview ended");
+  //     } catch (err) {
+  //       console.log(err);
+  //       toast.error("Failed to end interview");
+  //     }
+  //   };
   const handleEndInterview = async () => {
     try {
-      await interviewAPI.end(roomId);
+      const response = await interviewAPI.end(roomId);
+      setInterviewRoomId(response.data.roomId);
+
+      const socket = getSocket();
+      socket?.emit(SOCKET_EVENTS.ROOM_CLOSE, { roomId });
+
+      // Set both state and ref
+      setShowScoreModal(true);
+      showScoreModalRef.current = true;
       toast.success("Interview ended");
-      navigate("/dashboard");
     } catch (err) {
+      console.log(err);
       toast.error("Failed to end interview");
     }
+  };
+  const handleLeaveRoom = () => {
+    const socket = getSocket();
+    socket?.emit(SOCKET_EVENTS.ROOM_LEAVE, { roomId });
+    navigate("/dashboard");
   };
 
   // ─── Loading state ────────────────────────────────────────────────────────
@@ -288,6 +316,14 @@ const InterviewRoom = () => {
               className="text-xs bg-[#da3633] hover:bg-[#f85149] text-white px-3 py-1.5 rounded-lg transition-colors font-medium"
             >
               End Interview
+            </button>
+          )}
+          {!isInterviewer() && (
+            <button
+              onClick={handleLeaveRoom}
+              className="text-xs bg-[#da3633] hover:bg-[#f85149] text-white px-3 py-1.5 rounded-lg transition-colors font-medium"
+            >
+              Leave Room
             </button>
           )}
         </div>
@@ -398,6 +434,27 @@ const InterviewRoom = () => {
 
       {/* Room controls — bottom bar */}
       <RoomControls roomId={roomId} code={currentCode} language={language} />
+
+      {/* Score modal */}
+      {showScoreModal && (
+        <ScoreModal
+          roomId={interviewRoomId || roomId}
+          candidateName={
+            participants.find((p) => p.role === "CANDIDATE")?.email ||
+            "Candidate"
+          }
+          onClose={() => {
+            setShowScoreModal(false);
+            showScoreModalRef.current = false;
+            navigate("/dashboard");
+          }}
+          onSubmitted={() => {
+            setShowScoreModal(false);
+            showScoreModalRef.current = false;
+            navigate("/dashboard");
+          }}
+        />
+      )}
     </div>
   );
 };
