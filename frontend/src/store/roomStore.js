@@ -32,7 +32,6 @@ const useRoomStore = create((set) => ({
     // ─── Question loaded ──────────────────────────────────────────────────────
     setQuestion: (question) => set({
         question,
-        currentCode: question.starterCode || '',
     }),
 
     // ─── Participants ─────────────────────────────────────────────────────────

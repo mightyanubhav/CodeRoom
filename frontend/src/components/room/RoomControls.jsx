@@ -104,7 +104,7 @@ const RoomControls = ({ roomId, code, language }) => {
             )}
 
             {/* Bottom controls bar */}
-            <div className="bg-[#161b22] border-t border-[#30363d] px-4 py-2 flex items-center justify-between flex-shrink-0">
+            <div className="bg-[#161b22] border-t border-[#30363d] px-4 py-2 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2">
                     {/* Save indicator */}
                     <span className="text-xs text-[#484f58]">

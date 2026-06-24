@@ -67,8 +67,8 @@ const InterviewRoom = () => {
 
     const socket = initSocket(accessToken);
     socketRef.current = socket;
-
-    // Remove old listeners first
+    
+    // Remove ALL existing listeners first
     socket.off(SOCKET_EVENTS.ROOM_STATE);
     socket.off(SOCKET_EVENTS.ROOM_USER_JOINED);
     socket.off(SOCKET_EVENTS.ROOM_USER_LEFT);
@@ -402,23 +402,64 @@ const InterviewRoom = () => {
 
           {/* Execution result */}
           {executionResult && (
-            <div className="bg-[#161b22] border-t border-[#30363d] p-3 h-32 overflow-y-auto shrink-0">
-              <div className="flex items-center gap-2 mb-2">
+            <div className="bg-[#161b22] border-t border-[#30363d] p-3 h-40 overflow-y-auto shrink-0">
+              <div className="flex items-center justify-between mb-2">
                 <span
-                  className={`text-xs font-medium ${executionResult.passed ? "text-[#3fb950]" : "text-[#f85149]"}`}
+                  className={`text-xs font-medium ${
+                    executionResult.timedOut
+                      ? "text-[#d29922]"
+                      : executionResult.passed
+                        ? "text-[#3fb950]"
+                        : "text-[#f85149]"
+                  }`}
                 >
-                  {executionResult.passed
-                    ? "✅ All tests passed"
-                    : "❌ Tests failed"}
+                  {executionResult.timedOut
+                    ? "⏱ Time limit exceeded"
+                    : executionResult.passed
+                      ? "✅ All tests passed"
+                      : "❌ Tests failed"}
                 </span>
+                {executionResult.executionTimeMs && (
+                  <span className="text-xs text-[#484f58]">
+                    {executionResult.executionTimeMs}ms
+                  </span>
+                )}
               </div>
+
+              {/* Test case results */}
+              {executionResult.results &&
+                executionResult.results.length > 0 && (
+                  <div className="space-y-1 mb-2">
+                    {executionResult.results.map((r, i) => (
+                      <div key={i} className="flex items-center gap-2 text-xs">
+                        <span
+                          className={
+                            r.passed ? "text-[#3fb950]" : "text-[#f85149]"
+                          }
+                        >
+                          {r.passed ? "✅" : "❌"}
+                        </span>
+                        <span className="text-[#8b949e]">
+                          Test {i + 1}
+                          {r.input !== "hidden" && ` — Input: ${r.input}`}
+                        </span>
+                        {!r.passed && r.actualOutput !== "wrong" && (
+                          <span className="text-[#f85149]">
+                            Got: {r.actualOutput}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
               {executionResult.stdout && (
-                <pre className="text-xs text-[#8b949e] font-mono">
+                <pre className="text-xs text-[#8b949e] font-mono whitespace-pre-wrap">
                   {executionResult.stdout}
                 </pre>
               )}
               {executionResult.stderr && (
-                <pre className="text-xs text-[#f85149] font-mono">
+                <pre className="text-xs text-[#f85149] font-mono whitespace-pre-wrap">
                   {executionResult.stderr}
                 </pre>
               )}

@@ -18,6 +18,7 @@ import videoInterview.Interview.security.JwtAuthFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.http.HttpMethod;
 import java.util.List;
 
 @Configuration
@@ -41,7 +42,6 @@ public class SecurityConfig {
 
                                 // Route rules
                                 .authorizeHttpRequests(auth -> auth
-                                                // Public routes — no token needed
                                                 .requestMatchers(
                                                                 "/api/auth/register",
                                                                 "/api/auth/login",
@@ -51,7 +51,7 @@ public class SecurityConfig {
                                                                 "/api/rooms/*/sync",
                                                                 "/api/rooms/*/reset",
                                                                 "/api/interviews/by-room-entity/*",
-                                                                "/api/interviews/*/room-id", 
+                                                                "/api/interviews/*/room-id",
                                                                 "/api/execute",
                                                                 "/swagger-ui.html",
                                                                 "/swagger-ui/**",
@@ -61,10 +61,18 @@ public class SecurityConfig {
                                                 // Admin only
                                                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
 
-                                                // Interviewers only
+                                                // Interviewers only — write operations
                                                 .requestMatchers(
-                                                                "/api/interviews/create",
-                                                                "/api/questions/**")
+                                                                HttpMethod.POST, "/api/questions/**")
+                                                .hasRole("INTERVIEWER")
+                                                .requestMatchers(
+                                                                HttpMethod.PUT, "/api/questions/**")
+                                                .hasRole("INTERVIEWER")
+                                                .requestMatchers(
+                                                                HttpMethod.DELETE, "/api/questions/**")
+                                                .hasRole("INTERVIEWER")
+                                                .requestMatchers(
+                                                                "/api/interviews/create")
                                                 .hasRole("INTERVIEWER")
 
                                                 // Everything else needs a valid token
