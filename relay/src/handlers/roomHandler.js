@@ -16,20 +16,13 @@ dotenv.config();
 
 const SPRING_URL = process.env.SPRING_BOOT_URL;
 
-// Strip "Bearer " prefix if present — token stored on socket already has it
 const getRawToken = (socket) => {
   const token =
     socket.handshake.headers.token || socket.handshake.auth?.token || "";
   return token.startsWith("Bearer ") ? token.substring(7) : token;
 };
 
-// ─── Room Handler ─────────────────────────────────────────────────────────────
-// Called once per socket connection from index.js
-// All room-related socket events are registered here
-
 export const roomHandler = (io, socket) => {
-  // ─── Join Room ────────────────────────────────────────────────────────────
-  // Client emits: socket.emit('room:join', { roomId })
 
   socket.on("room:join", async ({ roomId }) => {
     try {
@@ -40,21 +33,33 @@ export const roomHandler = (io, socket) => {
 
       const roomData = response.data;
 
-      // 2. Check room status first
+      // 2. Check room status
       if (roomData.status === "CLOSED" || roomData.status === "COMPLETED") {
         socket.emit("room:error", { message: "This interview has ended" });
         return;
       }
 
-      // 3. Check if this user is already tracked in Redis
+      // 3. Check if user already in Redis
       const participants = await getParticipants(roomId);
       const alreadyInRoom = participants.hasOwnProperty(socket.userId);
 
       if (!alreadyInRoom) {
-        // 4. Check capacity using Spring Boot count
+        // 4. Check capacity — handle stale Spring Boot count
         if (roomData.participantCount >= 2) {
-          socket.emit("room:error", { message: "Room is full" });
-          return;
+          const redisCount = await getParticipantCount(roomId);
+          if (redisCount < roomData.participantCount) {
+            // Spring Boot count is stale — reset
+            console.log(`🔄 Stale Spring Boot count — resetting room ${roomId}`);
+            try {
+              await axios.post(`${SPRING_URL}/api/rooms/${roomId}/reset`);
+            } catch (resetErr) {
+              console.error('Reset failed:', resetErr.message);
+            }
+          } else {
+            // Room genuinely full
+            socket.emit("room:error", { message: "Room is full" });
+            return;
+          }
         }
       }
 
@@ -62,7 +67,7 @@ export const roomHandler = (io, socket) => {
       socket.join(roomId);
       socket.roomId = roomId;
 
-      // 6. Track in Redis — update socketId even if already exists
+      // 6. Track in Redis
       await addParticipant(roomId, socket.userId, socket.id);
 
       // 7. Get or initialize room state
@@ -105,6 +110,7 @@ export const roomHandler = (io, socket) => {
       }
 
       console.log(`✅ ${socket.userEmail} joined room ${roomId}`);
+
     } catch (err) {
       console.error("room:join error:", err.message);
       console.error("room:join full error:", err.response?.data || err.stack);
@@ -112,15 +118,9 @@ export const roomHandler = (io, socket) => {
     }
   });
 
-  // ─── Leave Room ───────────────────────────────────────────────────────────
-  // Client emits: socket.emit('room:leave', { roomId })
-
   socket.on("room:leave", async ({ roomId }) => {
     await handleLeaveRoom(io, socket, roomId);
   });
-
-  // ─── Disconnect — browser closed or network lost ──────────────────────────
-  // Automatically fired by Socket.io
 
   socket.on("disconnect", async () => {
     if (socket.roomId) {
@@ -128,8 +128,6 @@ export const roomHandler = (io, socket) => {
     }
     console.log(`🔌 ${socket.userEmail} disconnected`);
   });
-
-  // ─── Get Room State ───────────────────────────────────────────────────────
 
   socket.on("room:get_state", async ({ roomId }) => {
     try {
@@ -140,107 +138,50 @@ export const roomHandler = (io, socket) => {
     }
   });
 
-  // ─── Change Language ──────────────────────────────────────────────────────
-  // Client emits: socket.emit('room:language_change', { roomId, language })
-
   socket.on("room:language_change", async ({ roomId, language }) => {
     try {
-      // Update Redis
       const roomState = await getRoomState(roomId);
       if (roomState) {
         roomState.language = language;
         await setRoomState(roomId, roomState);
       }
-
-      // Broadcast to everyone in room including sender
       io.to(roomId).emit("room:language_changed", { language });
-
-      // Publish to other relay pods
       await publishToRoom(roomId, "room:language_changed", { language });
     } catch (err) {
       socket.emit("room:error", { message: "Failed to change language" });
     }
   });
 
-  // ─── Close Room (interviewer ends session) ────────────────────────────────
-
-  // socket.on("room:close", async ({ roomId }) => {
-  //   try {
-  //     if (socket.userRole !== "INTERVIEWER") {
-  //       socket.emit("room:error", {
-  //         message: "Only interviewer can close room",
-  //       });
-  //       return;
-  //     }
-
-  //     // Tell Spring Boot to close the room
-  //     // await axios.post(
-  //     //   `${SPRING_URL}/api/rooms/${roomId}/close`,
-  //     //   {},
-  //     //   {
-  //     //     headers: { Authorization: `Bearer ${socket.handshake.auth.token}` },
-  //     //   },
-  //     // );
-  //     await axios.post(
-  //       `${SPRING_URL}/api/rooms/${roomId}/close`,
-  //       {},
-  //       {
-  //         headers: { Authorization: `Bearer ${getRawToken(socket)}` },
-  //       },
-  //     );
-
-  //     // Notify all participants
-  //     io.to(roomId).emit("room:closed", {
-  //       message: "Interview has ended",
-  //     });
-
-  //     // Cleanup Redis
-  //     await deleteRoomState(roomId);
-  //     await unsubscribeFromRoom(roomId);
-
-  //     console.log(`🔒 Room ${roomId} closed`);
-  //   } catch (err) {
-  //     socket.emit("room:error", { message: "Failed to close room" });
-  //   }
-  // });
   socket.on("room:close", async ({ roomId }) => {
     try {
       if (socket.userRole !== "INTERVIEWER") {
-        socket.emit("room:error", {
-          message: "Only interviewer can close room",
-        });
+        socket.emit("room:error", { message: "Only interviewer can close room" });
         return;
       }
 
-      // Tell Spring Boot to close the room
       await axios.post(
         `${SPRING_URL}/api/rooms/${roomId}/close`,
         {},
-        {
-          headers: { Authorization: `Bearer ${getRawToken(socket)}` },
-        },
+        { headers: { Authorization: `Bearer ${getRawToken(socket)}` } },
       );
 
-      // Notify all participants — candidate gets this and redirects
-      io.to(roomId).emit("room:closed", {
-        message: "Interview has ended",
-      });
+      io.to(roomId).emit("room:closed", { message: "Interview has ended" });
 
-      // Mark as closed in Redis before deleting
-      // So any reconnect attempts get blocked
       const roomState = await getRoomState(roomId);
       if (roomState) {
         roomState.status = "CLOSED";
         await setRoomState(roomId, roomState);
+      } else {
+        await setRoomState(roomId, { roomId, status: "CLOSED" });
       }
 
-      // Cleanup after short delay — give time for reconnects to be blocked
       setTimeout(async () => {
         await deleteRoomState(roomId);
         await unsubscribeFromRoom(roomId);
-      }, 30000); // keep for 30 seconds then delete
+      }, 60000);
 
       console.log(`🔒 Room ${roomId} closed`);
+
     } catch (err) {
       console.error("room:close error:", err.message);
       socket.emit("room:error", { message: "Failed to close room" });
@@ -248,42 +189,32 @@ export const roomHandler = (io, socket) => {
   });
 };
 
-// ─── Shared leave room logic ──────────────────────────────────────────────────
-
 const handleLeaveRoom = async (io, socket, roomId) => {
   try {
-    // 1. Leave Socket.io room
     socket.leave(roomId);
-
-    // 2. Remove from Redis participant tracking
     await removeParticipant(roomId, socket.userId);
 
-    // 3. Tell Spring Boot participant left
-    await axios.post(
-      `${SPRING_URL}/api/rooms/${roomId}/left`,
-      {},
-      {
-        headers: {
-          Authorization: `Bearer ${getRawToken(socket)}`,
-        },
-      },
-    );
+    // No auth header — endpoint is public
+    try {
+      await axios.post(`${SPRING_URL}/api/rooms/${roomId}/left`, {});
+    } catch (springErr) {
+      console.error(`❌ Spring Boot /left failed:`, springErr.message);
+    }
 
-    // 4. Notify remaining participants
     socket.to(roomId).emit("room:user_left", {
       userId: socket.userId,
       email: socket.userEmail,
     });
 
-    // 5. If no participants left — cleanup
     const remaining = await getParticipantCount(roomId);
     if (remaining === 0) {
       await deleteRoomState(roomId);
       await unsubscribeFromRoom(roomId);
-      console.log(`🗑️ Room ${roomId} cleaned up — no participants`);
+      console.log(`🗑️ Room ${roomId} cleaned up`);
     }
 
     console.log(`👋 ${socket.userEmail} left room ${roomId}`);
+
   } catch (err) {
     console.error("handleLeaveRoom error:", err.message);
   }

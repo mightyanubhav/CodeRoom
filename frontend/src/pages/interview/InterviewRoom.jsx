@@ -54,6 +54,8 @@ const InterviewRoom = () => {
   const [interviewRoomId, setInterviewRoomId] = useState(null);
   const showScoreModalRef = useRef(false);
 
+  const socketRef = useRef(null);
+
   // Keep codeRef in sync
   useEffect(() => {
     codeRef.current = currentCode;
@@ -64,8 +66,22 @@ const InterviewRoom = () => {
     if (!accessToken) return;
 
     const socket = initSocket(accessToken);
+    socketRef.current = socket;
 
-    // Room events
+    // Remove old listeners first
+    socket.off(SOCKET_EVENTS.ROOM_STATE);
+    socket.off(SOCKET_EVENTS.ROOM_USER_JOINED);
+    socket.off(SOCKET_EVENTS.ROOM_USER_LEFT);
+    socket.off(SOCKET_EVENTS.ROOM_CLOSED);
+    socket.off(SOCKET_EVENTS.ROOM_ERROR);
+    socket.off(SOCKET_EVENTS.EDITOR_CODE_CHANGED);
+    socket.off(SOCKET_EVENTS.ROOM_LANGUAGE_CHANGED);
+    socket.off(SOCKET_EVENTS.EDITOR_QUESTION_LOADED);
+    socket.off(SOCKET_EVENTS.EDITOR_EXECUTION_STARTED);
+    socket.off(SOCKET_EVENTS.EDITOR_EXECUTION_RESULT);
+    socket.off(SOCKET_EVENTS.EDITOR_SAVED);
+
+    // Register all handlers
     socket.on(SOCKET_EVENTS.ROOM_STATE, async (state) => {
       setRoomState(state);
       setIsConnected(true);
@@ -74,11 +90,18 @@ const InterviewRoom = () => {
       const { user } = useAuthStore.getState();
       if (user?.role === "CANDIDATE") {
         try {
-          // roomId from URL = room.id = interview.roomId (same UUID now)
-          await interviewAPI.join(roomId);
-          console.log("✅ Interview status → IN_PROGRESS");
+          // Only join if interview is SCHEDULED — not already IN_PROGRESS
+          const interviewRes = await interviewAPI.getByRoomEntityId(roomId);
+          const interview = interviewRes.data;
+
+          if (interview.status === "SCHEDULED") {
+            await interviewAPI.join(interview.roomId);
+            console.log("✅ Interview status → IN_PROGRESS");
+          } else {
+            console.log("ℹ️ Interview already:", interview.status);
+          }
         } catch (err) {
-          console.log("Join interview:", err.message);
+          console.log("Join interview error:", err.message);
         }
       }
     });
@@ -96,7 +119,7 @@ const InterviewRoom = () => {
     });
 
     socket.on(SOCKET_EVENTS.ROOM_CLOSED, () => {
-      if (showScoreModalRef.current) return; // ← interviewer has modal open
+      if (showScoreModalRef.current) return;
       toast.error("Interview ended");
       navigate("/dashboard");
     });
@@ -137,16 +160,19 @@ const InterviewRoom = () => {
       console.log("✅ Auto saved");
     });
 
-    // ── Join room — wait for connection ──────────────────────────────────────
-    if (socket.connected) {
+    // Join room
+    const doJoin = () => {
       joinRoom(roomId);
+      console.log("🚀 Joining room:", roomId);
+    };
+
+    if (socket.connected) {
+      doJoin();
     } else {
-      socket.once("connect", () => {
-        joinRoom(roomId);
-      });
+      socket.once("connect", doJoin);
     }
 
-    // Auto save every 10 seconds
+    // Auto save
     autoSaveRef.current = setInterval(() => {
       autoSave(roomId, codeRef.current, language);
     }, 10000);
@@ -155,17 +181,21 @@ const InterviewRoom = () => {
       clearInterval(autoSaveRef.current);
       if (debounceRef.current) clearTimeout(debounceRef.current);
       resetRoom();
-      socket.off(SOCKET_EVENTS.ROOM_STATE);
-      socket.off(SOCKET_EVENTS.ROOM_USER_JOINED);
-      socket.off(SOCKET_EVENTS.ROOM_USER_LEFT);
-      socket.off(SOCKET_EVENTS.ROOM_CLOSED);
-      socket.off(SOCKET_EVENTS.ROOM_ERROR);
-      socket.off(SOCKET_EVENTS.EDITOR_CODE_CHANGED);
-      socket.off(SOCKET_EVENTS.ROOM_LANGUAGE_CHANGED);
-      socket.off(SOCKET_EVENTS.EDITOR_QUESTION_LOADED);
-      socket.off(SOCKET_EVENTS.EDITOR_EXECUTION_STARTED);
-      socket.off(SOCKET_EVENTS.EDITOR_EXECUTION_RESULT);
-      socket.off(SOCKET_EVENTS.EDITOR_SAVED);
+      // Use socketRef to ensure we remove from correct socket
+      const s = socketRef.current;
+      if (s) {
+        s.off(SOCKET_EVENTS.ROOM_STATE);
+        s.off(SOCKET_EVENTS.ROOM_USER_JOINED);
+        s.off(SOCKET_EVENTS.ROOM_USER_LEFT);
+        s.off(SOCKET_EVENTS.ROOM_CLOSED);
+        s.off(SOCKET_EVENTS.ROOM_ERROR);
+        s.off(SOCKET_EVENTS.EDITOR_CODE_CHANGED);
+        s.off(SOCKET_EVENTS.ROOM_LANGUAGE_CHANGED);
+        s.off(SOCKET_EVENTS.EDITOR_QUESTION_LOADED);
+        s.off(SOCKET_EVENTS.EDITOR_EXECUTION_STARTED);
+        s.off(SOCKET_EVENTS.EDITOR_EXECUTION_RESULT);
+        s.off(SOCKET_EVENTS.EDITOR_SAVED);
+      }
     };
   }, [roomId, accessToken]);
 
