@@ -78,13 +78,22 @@ export const editorHandler = (io, socket) => {
 
         // 2. Send to Spring Boot execution service
         // For now — placeholder, execution service comes later
+        const getRawToken = (socket) => {
+          const token =
+            socket.handshake.headers.token ||
+            socket.handshake.auth?.token ||
+            "";
+          return token.startsWith("Bearer ") ? token.substring(7) : token;
+        };
+
         const response = await axios.post(
           `${SPRING_URL}/api/execute`,
           { code, language, questionId, roomId },
           {
             headers: {
-              Authorization: `Bearer ${socket.handshake.headers.token || socket.handshake.auth?.token || ""}`,
+              Authorization: `Bearer ${getRawToken(socket)}`,
             },
+            timeout: 30000,
           },
         );
 

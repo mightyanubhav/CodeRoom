@@ -52,6 +52,7 @@ public class SecurityConfig {
                                                                 "/api/rooms/*/reset",
                                                                 "/api/interviews/by-room-entity/*",
                                                                 "/api/interviews/*/room-id", 
+                                                                "/api/execute",
                                                                 "/swagger-ui.html",
                                                                 "/swagger-ui/**",
                                                                 "/api-docs/**")
