@@ -33,7 +33,17 @@ export const roomHandler = (io, socket) => {
       const roomData = response.data;
 
       // 2. Check room status
-      if (roomData.status === "CLOSED" || roomData.status === "COMPLETED") {
+      if (roomData.status === "CLOSED") {
+        socket.emit("room:error", { message: "This interview has ended" });
+        return;
+      }
+
+      // Check interview status — covers COMPLETED/REVIEWED/CANCELLED
+      if (
+        roomData.interviewStatus === "COMPLETED" ||
+        roomData.interviewStatus === "REVIEWED" ||
+        roomData.interviewStatus === "CANCELLED"
+      ) {
         socket.emit("room:error", { message: "This interview has ended" });
         return;
       }

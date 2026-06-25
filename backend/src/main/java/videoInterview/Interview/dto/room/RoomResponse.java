@@ -14,6 +14,7 @@ public class RoomResponse {
     private String currentCode;
     private String language;
     private String status;
+    private String interviewStatus;   // ← add this
     private Integer participantCount;
-    private Integer maxParticipants;   // ← add this
+    private Integer maxParticipants;
 }

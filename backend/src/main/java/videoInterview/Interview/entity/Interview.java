@@ -80,7 +80,7 @@ public class Interview {
 
     // Total allowed participants = interviewers + 1 candidate
     public int getMaxParticipants() {
-        return maxInterviewers + 1;
+        return (maxInterviewers != null ? maxInterviewers : 1) + 1;
     }
 
     public enum Status {

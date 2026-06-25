@@ -68,20 +68,29 @@ public class RoomService {
         Room room = roomRepository.findById(roomId)
                 .orElseThrow(() -> new RuntimeException("Room not found"));
 
-        // Block if closed
+        // Block if room is closed
         if (room.getStatus() == Room.Status.CLOSED) {
             throw new RuntimeException("This interview has ended");
         }
 
-        // Dynamic max — interviewers + 1 candidate
-        int maxParticipants = room.getMaxParticipants();
+        // Block if interview is completed or reviewed
+        Interview interview = room.getInterview();
+        if (interview.getStatus() == Interview.Status.COMPLETED ||
+                interview.getStatus() == Interview.Status.REVIEWED ||
+                interview.getStatus() == Interview.Status.CANCELLED) {
+            // Also close the room in DB
+            room.setStatus(Room.Status.CLOSED);
+            roomRepository.save(room);
+            throw new RuntimeException("This interview has ended");
+        }
 
+        // Dynamic max participants
+        int maxParticipants = room.getMaxParticipants();
         if (room.getParticipantCount() >= maxParticipants) {
             throw new RuntimeException("Room is full");
         }
 
         room.setParticipantCount(room.getParticipantCount() + 1);
-
         if (room.getParticipantCount() >= maxParticipants) {
             room.setStatus(Room.Status.LOCKED);
         } else {
@@ -181,8 +190,9 @@ public class RoomService {
                 .currentCode(room.getCurrentCode())
                 .language(room.getLanguage().name())
                 .status(room.getStatus().name())
+                .interviewStatus(room.getInterview().getStatus().name()) // ← add this
                 .participantCount(room.getParticipantCount())
-                .maxParticipants(room.getMaxParticipants()) // ← add this
+                .maxParticipants(room.getMaxParticipants())
                 .build();
     }
 }
