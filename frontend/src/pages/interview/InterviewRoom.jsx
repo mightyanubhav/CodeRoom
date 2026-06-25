@@ -65,123 +65,142 @@ const InterviewRoom = () => {
   useEffect(() => {
     if (!accessToken) return;
 
-    const socket = initSocket(accessToken);
-    socketRef.current = socket;
-    
-    // Remove ALL existing listeners first
-    socket.off(SOCKET_EVENTS.ROOM_STATE);
-    socket.off(SOCKET_EVENTS.ROOM_USER_JOINED);
-    socket.off(SOCKET_EVENTS.ROOM_USER_LEFT);
-    socket.off(SOCKET_EVENTS.ROOM_CLOSED);
-    socket.off(SOCKET_EVENTS.ROOM_ERROR);
-    socket.off(SOCKET_EVENTS.EDITOR_CODE_CHANGED);
-    socket.off(SOCKET_EVENTS.ROOM_LANGUAGE_CHANGED);
-    socket.off(SOCKET_EVENTS.EDITOR_QUESTION_LOADED);
-    socket.off(SOCKET_EVENTS.EDITOR_EXECUTION_STARTED);
-    socket.off(SOCKET_EVENTS.EDITOR_EXECUTION_RESULT);
-    socket.off(SOCKET_EVENTS.EDITOR_SAVED);
+    let cancelled = false;
 
-    // Register all handlers
-    socket.on(SOCKET_EVENTS.ROOM_STATE, async (state) => {
-      setRoomState(state);
-      setIsConnected(true);
-      toast.success("Connected to room");
+    const setup = async () => {
+      // Validate/refresh token by making an API call first
+      // If expired, interceptor refreshes and updateToken fires
+      // which changes accessToken in store → useEffect re-runs with new token
+      try {
+        await roomAPI.getById(roomId);
+      } catch (err) {
+        if (err.response?.status === 401) return; // interceptor handles refresh
+      }
 
-      const { user } = useAuthStore.getState();
-      if (user?.role === "CANDIDATE") {
-        try {
-          // Only join if interview is SCHEDULED — not already IN_PROGRESS
-          const interviewRes = await interviewAPI.getByRoomEntityId(roomId);
-          const interview = interviewRes.data;
+      if (cancelled) return;
 
-          if (interview.status === "SCHEDULED") {
-            await interviewAPI.join(interview.roomId);
-            console.log("✅ Interview status → IN_PROGRESS");
-          } else {
-            console.log("ℹ️ Interview already:", interview.status);
+      const socket = initSocket(accessToken);
+      socketRef.current = socket;
+
+      // Remove ALL existing listeners first
+      socket.off(SOCKET_EVENTS.ROOM_STATE);
+      socket.off(SOCKET_EVENTS.ROOM_USER_JOINED);
+      socket.off(SOCKET_EVENTS.ROOM_USER_LEFT);
+      socket.off(SOCKET_EVENTS.ROOM_CLOSED);
+      socket.off(SOCKET_EVENTS.ROOM_ERROR);
+      socket.off(SOCKET_EVENTS.EDITOR_CODE_CHANGED);
+      socket.off(SOCKET_EVENTS.ROOM_LANGUAGE_CHANGED);
+      socket.off(SOCKET_EVENTS.EDITOR_QUESTION_LOADED);
+      socket.off(SOCKET_EVENTS.EDITOR_EXECUTION_STARTED);
+      socket.off(SOCKET_EVENTS.EDITOR_EXECUTION_RESULT);
+      socket.off(SOCKET_EVENTS.EDITOR_SAVED);
+
+      // ── Room events ───────────────────────────────────────────────────────
+      socket.on(SOCKET_EVENTS.ROOM_STATE, async (state) => {
+        setRoomState(state);
+        setIsConnected(true);
+        toast.success("Connected to room");
+
+        const { user } = useAuthStore.getState();
+        if (user?.role === "CANDIDATE") {
+          try {
+            const interviewRes = await interviewAPI.getByRoomEntityId(roomId);
+            const interview = interviewRes.data;
+            if (interview.status === "SCHEDULED") {
+              await interviewAPI.join(interview.roomId);
+              console.log("✅ Interview status → IN_PROGRESS");
+            } else {
+              console.log("ℹ️ Interview already:", interview.status);
+            }
+          } catch (err) {
+            console.log("Join interview error:", err.message);
           }
-        } catch (err) {
-          console.log("Join interview error:", err.message);
         }
-      }
-    });
+      });
 
-    socket.on(SOCKET_EVENTS.ROOM_USER_JOINED, (data) => {
-      addParticipant(data.userId, data);
-      setParticipants((prev) => [...prev, data]);
-      toast.success(`${data.email} joined`);
-    });
+      socket.on(SOCKET_EVENTS.ROOM_USER_JOINED, (data) => {
+        addParticipant(data.userId, data);
+        setParticipants((prev) => [...prev, data]);
+        toast.success(`${data.email} joined`);
+      });
 
-    socket.on(SOCKET_EVENTS.ROOM_USER_LEFT, (data) => {
-      removeParticipant(data.userId);
-      setParticipants((prev) => prev.filter((p) => p.userId !== data.userId));
-      toast(`${data.email} left`, { icon: "👋" });
-    });
+      socket.on(SOCKET_EVENTS.ROOM_USER_LEFT, (data) => {
+        removeParticipant(data.userId);
+        setParticipants((prev) => prev.filter((p) => p.userId !== data.userId));
+        toast(`${data.email} left`, { icon: "👋" });
+      });
 
-    socket.on(SOCKET_EVENTS.ROOM_CLOSED, () => {
-      if (showScoreModalRef.current) return;
-      toast.error("Interview ended");
-      navigate("/dashboard");
-    });
+      socket.on(SOCKET_EVENTS.ROOM_CLOSED, () => {
+        if (showScoreModalRef.current) return;
+        toast.error("Interview ended");
+        navigate("/dashboard");
+      });
 
-    socket.on(SOCKET_EVENTS.ROOM_ERROR, (data) => {
-      toast.error(data.message);
-      if (data.message === "This interview has ended") {
-        setTimeout(() => navigate("/dashboard"), 2000);
-      }
-    });
+      socket.on(SOCKET_EVENTS.ROOM_ERROR, (data) => {
+        toast.error(data.message);
+        if (data.message === "This interview has ended") {
+          setTimeout(() => navigate("/dashboard"), 2000);
+        }
+      });
 
-    socket.on(SOCKET_EVENTS.EDITOR_CODE_CHANGED, (data) => {
-      if (data.userId !== user?.id) {
+      // ── Editor events ─────────────────────────────────────────────────────
+      socket.on(SOCKET_EVENTS.EDITOR_CODE_CHANGED, (data) => {
+        if (data.userId !== user?.id) {
+          setIsRemoteChange(true);
+          setCode(data.code);
+          setTimeout(() => setIsRemoteChange(false), 100);
+        }
+      });
+
+      socket.on(SOCKET_EVENTS.ROOM_LANGUAGE_CHANGED, (data) => {
+        setLanguage(data.language);
+      });
+
+      socket.on(SOCKET_EVENTS.EDITOR_QUESTION_LOADED, (data) => {
+        setQuestion(data);
         setIsRemoteChange(true);
-        setCode(data.code);
+        setCode(data.starterCode || "");
         setTimeout(() => setIsRemoteChange(false), 100);
+        toast.success(`Question loaded: ${data.questionTitle}`);
+      });
+
+      socket.on(SOCKET_EVENTS.EDITOR_EXECUTION_STARTED, () => {
+        setExecuting(true);
+      });
+
+      socket.on(SOCKET_EVENTS.EDITOR_EXECUTION_RESULT, (data) => {
+        setExecutionResult(data);
+      });
+
+      socket.on(SOCKET_EVENTS.EDITOR_SAVED, () => {
+        console.log("✅ Auto saved");
+      });
+
+      // ── Join room ─────────────────────────────────────────────────────────
+      const doJoin = () => {
+        joinRoom(roomId);
+        console.log("🚀 Joining room:", roomId);
+      };
+
+      if (socket.connected) {
+        doJoin();
+      } else {
+        socket.once("connect", doJoin);
       }
-    });
 
-    socket.on(SOCKET_EVENTS.ROOM_LANGUAGE_CHANGED, (data) => {
-      setLanguage(data.language);
-    });
-
-    socket.on(SOCKET_EVENTS.EDITOR_QUESTION_LOADED, (data) => {
-      setQuestion(data);
-      toast.success(`Question loaded: ${data.questionTitle}`);
-    });
-
-    socket.on(SOCKET_EVENTS.EDITOR_EXECUTION_STARTED, () => {
-      setExecuting(true);
-    });
-
-    socket.on(SOCKET_EVENTS.EDITOR_EXECUTION_RESULT, (data) => {
-      setExecutionResult(data);
-    });
-
-    socket.on(SOCKET_EVENTS.EDITOR_SAVED, () => {
-      console.log("✅ Auto saved");
-    });
-
-    // Join room
-    const doJoin = () => {
-      joinRoom(roomId);
-      console.log("🚀 Joining room:", roomId);
+      // ── Auto save every 10 seconds ────────────────────────────────────────
+      autoSaveRef.current = setInterval(() => {
+        autoSave(roomId, codeRef.current, language);
+      }, 10000);
     };
 
-    if (socket.connected) {
-      doJoin();
-    } else {
-      socket.once("connect", doJoin);
-    }
-
-    // Auto save
-    autoSaveRef.current = setInterval(() => {
-      autoSave(roomId, codeRef.current, language);
-    }, 10000);
+    setup();
 
     return () => {
+      cancelled = true;
       clearInterval(autoSaveRef.current);
       if (debounceRef.current) clearTimeout(debounceRef.current);
       resetRoom();
-      // Use socketRef to ensure we remove from correct socket
       const s = socketRef.current;
       if (s) {
         s.off(SOCKET_EVENTS.ROOM_STATE);
@@ -198,7 +217,6 @@ const InterviewRoom = () => {
       }
     };
   }, [roomId, accessToken]);
-
   // ─── Handle code change ───────────────────────────────────────────────────
 
   const handleCodeChange = useCallback(
