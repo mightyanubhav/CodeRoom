@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import useAuthStore from "../../store/authStore.js";
 import useRoomStore from "../../store/roomStore.js";
@@ -24,6 +24,8 @@ import ScoreModal from "../../components/room/ScoreModal.jsx";
 const InterviewRoom = () => {
   const { roomId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams(); 
+  const urlRole = searchParams.get("role");
   const { user, accessToken, isInterviewer } = useAuthStore();
   const {
     currentCode,
@@ -102,18 +104,26 @@ const InterviewRoom = () => {
         toast.success("Connected to room");
 
         const { user } = useAuthStore.getState();
+
         if (user?.role === "CANDIDATE") {
+          // Candidate join flow — existing logic
           try {
             const interviewRes = await interviewAPI.getByRoomEntityId(roomId);
             const interview = interviewRes.data;
             if (interview.status === "SCHEDULED") {
               await interviewAPI.join(interview.roomId);
-              console.log("✅ Interview status → IN_PROGRESS");
-            } else {
-              console.log("ℹ️ Interview already:", interview.status);
             }
           } catch (err) {
             console.log("Join interview error:", err.message);
+          }
+        } else if (user?.role === "INTERVIEWER" && urlRole === "interviewer") {
+          // Panelist joining via panelist link
+          try {
+            const interviewRes = await interviewAPI.getByRoomEntityId(roomId);
+            await interviewAPI.joinAsPanelist(interviewRes.data.id);
+            console.log("✅ Joined as panelist");
+          } catch (err) {
+            console.log("Panelist join:", err.message);
           }
         }
       });

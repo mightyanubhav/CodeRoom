@@ -23,7 +23,6 @@ const getRawToken = (socket) => {
 };
 
 export const roomHandler = (io, socket) => {
-
   socket.on("room:join", async ({ roomId }) => {
     try {
       // 1. Fetch room from Spring Boot — source of truth
@@ -44,19 +43,20 @@ export const roomHandler = (io, socket) => {
       const alreadyInRoom = participants.hasOwnProperty(socket.userId);
 
       if (!alreadyInRoom) {
-        // 4. Check capacity — handle stale Spring Boot count
-        if (roomData.participantCount >= 2) {
+        // Use maxParticipants from Spring Boot — dynamic for panel interviews
+        const maxParticipants = roomData.maxParticipants || 2;
+        if (roomData.participantCount >= maxParticipants) {
           const redisCount = await getParticipantCount(roomId);
           if (redisCount < roomData.participantCount) {
-            // Spring Boot count is stale — reset
-            console.log(`🔄 Stale Spring Boot count — resetting room ${roomId}`);
+            console.log(
+              `🔄 Stale Spring Boot count — resetting room ${roomId}`,
+            );
             try {
               await axios.post(`${SPRING_URL}/api/rooms/${roomId}/reset`);
             } catch (resetErr) {
-              console.error('Reset failed:', resetErr.message);
+              console.error("Reset failed:", resetErr.message);
             }
           } else {
-            // Room genuinely full
             socket.emit("room:error", { message: "Room is full" });
             return;
           }
@@ -110,7 +110,6 @@ export const roomHandler = (io, socket) => {
       }
 
       console.log(`✅ ${socket.userEmail} joined room ${roomId}`);
-
     } catch (err) {
       console.error("room:join error:", err.message);
       console.error("room:join full error:", err.response?.data || err.stack);
@@ -155,7 +154,9 @@ export const roomHandler = (io, socket) => {
   socket.on("room:close", async ({ roomId }) => {
     try {
       if (socket.userRole !== "INTERVIEWER") {
-        socket.emit("room:error", { message: "Only interviewer can close room" });
+        socket.emit("room:error", {
+          message: "Only interviewer can close room",
+        });
         return;
       }
 
@@ -181,7 +182,6 @@ export const roomHandler = (io, socket) => {
       }, 60000);
 
       console.log(`🔒 Room ${roomId} closed`);
-
     } catch (err) {
       console.error("room:close error:", err.message);
       socket.emit("room:error", { message: "Failed to close room" });
@@ -214,7 +214,6 @@ const handleLeaveRoom = async (io, socket, roomId) => {
     }
 
     console.log(`👋 ${socket.userEmail} left room ${roomId}`);
-
   } catch (err) {
     console.error("handleLeaveRoom error:", err.message);
   }

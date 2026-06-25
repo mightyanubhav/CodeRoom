@@ -98,4 +98,12 @@ public class InterviewController {
         InterviewResponse response = interviewService.updateRoomId(interviewId, body.get("roomId"));
         return ResponseEntity.ok(response);
     }
+
+    @PostMapping("/{id}/join-as-panelist")
+    @PreAuthorize("hasRole('INTERVIEWER')")
+    public ResponseEntity<InterviewResponse> joinAsPanelist(
+            @PathVariable String id,
+            @AuthenticationPrincipal String userId) {
+        return ResponseEntity.ok(interviewService.joinAsPanelist(id, userId));
+    }
 }

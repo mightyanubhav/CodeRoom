@@ -14,12 +14,18 @@ const Dashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [scheduledAt, setScheduledAt] = useState("");
+  const [maxInterviewers, setMaxInterviewers] = useState(1);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showDashboardScoreModal, setShowDashboardScoreModal] = useState(false);
   const [selectedInterview, setSelectedInterview] = useState(null);
 
-  // ─── Fetch interviews on mount ─────────────────────────────────────────────
+  // ─── Helpers ───────────────────────────────────────────────────────────────
+  const isActive = (status) =>
+    status !== INTERVIEW_STATUS.COMPLETED &&
+    status !== INTERVIEW_STATUS.REVIEWED &&
+    status !== INTERVIEW_STATUS.CANCELLED;
 
+  // ─── Fetch interviews ──────────────────────────────────────────────────────
   const fetchInterviews = async () => {
     try {
       setIsLoading(true);
@@ -27,11 +33,8 @@ const Dashboard = () => {
         const response = await interviewAPI.getMyInterviews();
         setInterviews(response.data);
       }
-      // Candidate sees nothing on dashboard
-      // They join via direct room link only
     } catch (err) {
       toast.error("Failed to load interviews");
-      console.log(err);
     } finally {
       setIsLoading(false);
     }
@@ -41,44 +44,7 @@ const Dashboard = () => {
     fetchInterviews();
   }, []);
 
-  // ─── Create interview + room ───────────────────────────────────────────────
-  //   const handleCreateInterview = async (e) => {
-  //     e.preventDefault();
-  //     if (!scheduledAt) {
-  //       toast.error("Please select a date and time");
-  //       return;
-  //     }
-
-  //     try {
-  //       setIsCreating(true);
-
-  //       // 1. Create interview
-  //       const interviewRes = await interviewAPI.create({ scheduledAt });
-  //       const interview = interviewRes.data;
-
-  //       // 2. Create room
-  //       const roomRes = await roomAPI.create(interview.id);
-  //       const room = roomRes.data;
-
-  //       // 3. Update interview roomId to match room.id
-  //       await interviewAPI.updateRoomId(interview.id, room.id);
-
-  //       toast.success("Interview created!");
-  //       setShowCreateForm(false);
-  //       setScheduledAt("");
-  //       await fetchInterviews();
-
-  //       // 4. Copy link using room.id
-  //       const roomLink = `${window.location.origin}/room/${room.id}`;
-  //       navigator.clipboard.writeText(roomLink);
-  //       toast.success("Room link copied to clipboard!");
-  //     } catch (err) {
-  //       toast.error(err.response?.data?.message || "Failed to create interview");
-  //     } finally {
-  //       setIsCreating(false);
-  //     }
-  //   };
-
+  // ─── Create interview ──────────────────────────────────────────────────────
   const handleCreateInterview = async (e) => {
     e.preventDefault();
     if (!scheduledAt) {
@@ -89,33 +55,28 @@ const Dashboard = () => {
     try {
       setIsCreating(true);
 
-      // 1. Create interview
-      const interviewRes = await interviewAPI.create({ scheduledAt });
+      const interviewRes = await interviewAPI.create({
+        scheduledAt,
+        maxInterviewers,
+      });
       const interview = interviewRes.data;
 
-      // 2. Create room
       const roomRes = await roomAPI.create(interview.id);
       const room = roomRes.data;
 
-      // 3. Update interview roomId = room.id
       await interviewAPI.updateRoomId(interview.id, room.id);
 
-      // 4. Build complete interview object manually
-      const completeInterview = {
-        ...interview,
-        roomId: room.id, // ← use room.id directly, don't wait for DB
-      };
-
-      // 5. Add to list manually — don't re-fetch
+      const completeInterview = { ...interview, roomId: room.id };
       setInterviews((prev) => [completeInterview, ...prev]);
 
-      // 6. Copy link using room.id directly
-      const roomLink = `${window.location.origin}/room/${room.id}`;
-      navigator.clipboard.writeText(roomLink);
-      toast.success("Interview created! Room link copied!");
+      // Candidate link
+      const candidateLink = `${window.location.origin}/room/${room.id}`;
+      navigator.clipboard.writeText(candidateLink);
+      toast.success("Interview created! Candidate link copied!");
 
       setShowCreateForm(false);
       setScheduledAt("");
+      setMaxInterviewers(1);
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to create interview");
     } finally {
@@ -123,37 +84,47 @@ const Dashboard = () => {
     }
   };
 
+  // ─── Copy links ────────────────────────────────────────────────────────────
+  const handleCopyCandidateLink = (roomId) => {
+    const link = `${window.location.origin}/room/${roomId}?role=candidate`;
+    navigator.clipboard.writeText(link);
+    toast.success("Candidate link copied!");
+  };
+
+  const handleCopyInterviewerLink = (roomId) => {
+    const link = `${window.location.origin}/room/${roomId}?role=interviewer`;
+    navigator.clipboard.writeText(link);
+    toast.success("Panelist link copied!");
+  };
+
   // ─── Join room ─────────────────────────────────────────────────────────────
   const handleJoinRoom = (roomId) => {
     navigate(`/room/${roomId}`);
   };
 
+  // ─── Format duration ───────────────────────────────────────────────────────
+  const formatDuration = (startedAt, endedAt) => {
+    if (!startedAt || !endedAt) return null;
+    const minutes = Math.round(
+      (new Date(endedAt) - new Date(startedAt)) / 60000
+    );
+    return `${minutes} min`;
+  };
+
   // ─── Status badge ──────────────────────────────────────────────────────────
   const StatusBadge = ({ status }) => {
     const styles = {
-      SCHEDULED: "bg-[#1f3244] text-[#58a6ff] border-[#1f3244]",
+      SCHEDULED:   "bg-[#1f3244] text-[#58a6ff] border-[#1f3244]",
       IN_PROGRESS: "bg-[#1a2f1a] text-[#3fb950] border-[#238636]",
-      COMPLETED: "bg-[#1f1f2e] text-[#8b949e] border-[#30363d]",
-      REVIEWED: "bg-[#2d1f47] text-[#bc8cff] border-[#8957e5]",
-      CANCELLED: "bg-[#2d1318] text-[#f85149] border-[#da3633]",
+      COMPLETED:   "bg-[#1f1f2e] text-[#8b949e] border-[#30363d]",
+      REVIEWED:    "bg-[#2d1f47] text-[#bc8cff] border-[#8957e5]",
+      CANCELLED:   "bg-[#2d1318] text-[#f85149] border-[#da3633]",
     };
-
     return (
-      <span
-        className={`text-xs px-2 py-0.5 rounded-full border font-medium ${styles[status] || styles.SCHEDULED}`}
-      >
+      <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${styles[status] || styles.SCHEDULED}`}>
         {status.replace("_", " ")}
       </span>
     );
-  };
-
-  // ─── Format date ───────────────────────────────────────────────────────────
-  const formatDuration = (startedAt, endedAt) => {
-    if (!startedAt || !endedAt) return null;
-    const start = new Date(startedAt);
-    const end = new Date(endedAt);
-    const minutes = Math.round((end - start) / 60000);
-    return `${minutes} min`;
   };
 
   return (
@@ -183,7 +154,7 @@ const Dashboard = () => {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h2 className="text-2xl font-bold text-white">
+            <h2 className="text-2xl font-bold">
               {isInterviewer() ? "My Interviews" : "My Sessions"}
             </h2>
             <p className="text-[#8b949e] text-sm mt-1">
@@ -192,8 +163,6 @@ const Dashboard = () => {
                 : "Your interview sessions"}
             </p>
           </div>
-
-          {/* Create button — interviewer only */}
           {isInterviewer() && (
             <button
               onClick={() => setShowCreateForm(!showCreateForm)}
@@ -204,26 +173,34 @@ const Dashboard = () => {
           )}
         </div>
 
-        {/* Create Interview Form */}
+        {/* Create form */}
         {showCreateForm && (
           <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-6 mb-6">
-            <h3 className="text-white font-semibold mb-4">
-              Schedule Interview
-            </h3>
-            <form
-              onSubmit={handleCreateInterview}
-              className="flex items-end gap-4"
-            >
-              <div className="flex-1">
-                <label className="block text-sm text-[#8b949e] mb-1.5">
-                  Date & Time
-                </label>
+            <h3 className="text-white font-semibold mb-4">Schedule Interview</h3>
+            <form onSubmit={handleCreateInterview} className="flex items-end gap-4 flex-wrap">
+              <div className="flex-1 min-w-48">
+                <label className="block text-sm text-[#8b949e] mb-1.5">Date & Time</label>
                 <input
                   type="datetime-local"
                   value={scheduledAt}
                   onChange={(e) => setScheduledAt(e.target.value)}
-                  className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-[#238636] focus:ring-1 focus:ring-[#238636] transition-colors"
+                  className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-[#238636] transition-colors"
                 />
+              </div>
+              <div>
+                <label className="block text-sm text-[#8b949e] mb-1.5">
+                  Panel Size
+                </label>
+                <select
+                  value={maxInterviewers}
+                  onChange={(e) => setMaxInterviewers(Number(e.target.value))}
+                  className="bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-[#238636] transition-colors"
+                >
+                  <option value={1}>1 Interviewer</option>
+                  <option value={2}>2 Interviewers</option>
+                  <option value={3}>3 Interviewers</option>
+                  <option value={4}>4 Interviewers</option>
+                </select>
               </div>
               <div className="flex gap-2">
                 <button
@@ -238,7 +215,7 @@ const Dashboard = () => {
                   disabled={isCreating}
                   className="px-4 py-2.5 text-sm bg-[#238636] hover:bg-[#2ea043] disabled:opacity-50 text-white rounded-lg transition-colors"
                 >
-                  {isCreating ? "Creating..." : "Create & Copy Link"}
+                  {isCreating ? "Creating..." : "Create Interview"}
                 </button>
               </div>
             </form>
@@ -248,24 +225,9 @@ const Dashboard = () => {
         {/* Interview list */}
         {isLoading ? (
           <div className="flex items-center justify-center py-20">
-            <svg
-              className="animate-spin h-8 w-8 text-[#238636]"
-              viewBox="0 0 24 24"
-              fill="none"
-            >
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-              />
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8v8z"
-              />
+            <svg className="animate-spin h-8 w-8 text-[#238636]" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
             </svg>
           </div>
         ) : interviews.length === 0 ? (
@@ -284,83 +246,82 @@ const Dashboard = () => {
                 key={interview.id}
                 className="bg-[#161b22] border border-[#30363d] rounded-xl p-5 flex items-center justify-between hover:border-[#484f58] transition-colors"
               >
-                <div className="flex items-center gap-4">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <StatusBadge status={interview.status} />
-                      {interview.candidateName && (
-                        <span className="text-xs text-[#8b949e]">
-                          with {interview.candidateName}
-                        </span>
-                      )}
-                    </div>
-                    {interview.startedAt && interview.endedAt && (
-                      <span className="text-xs text-[#484f58]">
-                        ⏱{" "}
-                        {formatDuration(interview.startedAt, interview.endedAt)}
+                {/* Left — info */}
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <StatusBadge status={interview.status} />
+                    {interview.candidateName && (
+                      <span className="text-xs text-[#8b949e]">
+                        with {interview.candidateName}
                       </span>
                     )}
-
-                    {/* Score display */}
-                    {interview.score && (
-                      <div className="flex items-center gap-2 mt-1">
-                        <span
-                          className={`text-sm font-bold ${
-                            interview.score >= 7
-                              ? "text-[#3fb950]"
-                              : interview.score >= 5
-                                ? "text-[#d29922]"
-                                : "text-[#f85149]"
-                          }`}
-                        >
-                          {interview.score}/10
-                        </span>
-                        <span className="text-xs text-[#8b949e]">
-                          {interview.score >= 7
-                            ? "✅ Proceed"
-                            : interview.score >= 5
-                              ? "⚠️ Consider"
-                              : "❌ Reject"}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Notes preview */}
-                    {interview.notes && (
-                      <p className="text-xs text-[#484f58] mt-1 max-w-xs truncate">
-                        "{interview.notes}"
-                      </p>
-                    )}
                   </div>
+
+                  {interview.startedAt && interview.endedAt && (
+                    <span className="text-xs text-[#484f58]">
+                      ⏱ {formatDuration(interview.startedAt, interview.endedAt)}
+                    </span>
+                  )}
+
+                  {interview.score && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={`text-sm font-bold ${
+                        interview.score >= 7 ? "text-[#3fb950]" :
+                        interview.score >= 5 ? "text-[#d29922]" :
+                        "text-[#f85149]"
+                      }`}>
+                        {interview.score}/10
+                      </span>
+                      <span className="text-xs text-[#8b949e]">
+                        {interview.score >= 7 ? "✅ Proceed" :
+                         interview.score >= 5 ? "⚠️ Consider" :
+                         "❌ Reject"}
+                      </span>
+                    </div>
+                  )}
+
+                  {interview.notes && (
+                    <p className="text-xs text-[#484f58] mt-1 max-w-xs truncate">
+                      "{interview.notes}"
+                    </p>
+                  )}
                 </div>
 
+                {/* Right — actions */}
                 <div className="flex items-center gap-2">
-                  {/* Copy room link */}
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(
-                        `${window.location.origin}/room/${interview.roomId}`,
-                      );
-                      toast.success("Room link copied!");
-                    }}
-                    className="text-xs text-[#8b949e] hover:text-white border border-[#30363d] hover:border-[#484f58] px-3 py-1.5 rounded-lg transition-colors"
-                  >
-                    Copy Link
-                  </button>
 
-                  {/* Join room */}
-                  {interview.status !== INTERVIEW_STATUS.COMPLETED &&
-                    interview.status !== INTERVIEW_STATUS.REVIEWED &&
-                    interview.status !== INTERVIEW_STATUS.CANCELLED && (
+                  {/* Active interview — show links + join */}
+                  {isActive(interview.status) && (
+                    <>
+                      {/* Candidate link */}
+                      <button
+                        onClick={() => handleCopyCandidateLink(interview.roomId)}
+                        className="text-xs text-[#8b949e] hover:text-white border border-[#30363d] hover:border-[#484f58] px-3 py-1.5 rounded-lg transition-colors"
+                      >
+                        Copy Candidate Link
+                      </button>
+
+                      {/* Panelist link — only if panel > 1 */}
+                      {interview.maxInterviewers > 1 && (
+                        <button
+                          onClick={() => handleCopyInterviewerLink(interview.roomId)}
+                          className="text-xs text-[#58a6ff] hover:text-white border border-[#1f3244] hover:border-[#58a6ff] px-3 py-1.5 rounded-lg transition-colors"
+                        >
+                          Copy Panelist Link
+                        </button>
+                      )}
+
+                      {/* Join room */}
                       <button
                         onClick={() => handleJoinRoom(interview.roomId)}
                         className="text-xs bg-[#238636] hover:bg-[#2ea043] text-white px-3 py-1.5 rounded-lg transition-colors font-medium"
                       >
                         Join Room
                       </button>
-                    )}
+                    </>
+                  )}
 
-                  {/* Submit score — if completed but not reviewed */}
+                  {/* Completed — submit score */}
                   {interview.status === INTERVIEW_STATUS.COMPLETED && (
                     <button
                       onClick={() => {
@@ -372,12 +333,20 @@ const Dashboard = () => {
                       Submit Score
                     </button>
                   )}
+
+                  {/* Reviewed — show completed badge */}
+                  {interview.status === INTERVIEW_STATUS.REVIEWED && (
+                    <span className="text-xs text-[#8b949e] border border-[#30363d] px-3 py-1.5 rounded-lg">
+                      Reviewed ✓
+                    </span>
+                  )}
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
       {/* Score modal from dashboard */}
       {showDashboardScoreModal && selectedInterview && (
         <ScoreModal

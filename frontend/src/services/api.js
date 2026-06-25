@@ -93,6 +93,7 @@ export const interviewAPI = {
     api.get(`/api/interviews/by-room-entity/${roomEntityId}`),
   updateRoomId: (interviewId, roomId) =>
     api.patch(`/api/interviews/${interviewId}/room-id`, { roomId }),
+  joinAsPanelist: (interviewId) => api.post(`/api/interviews/${interviewId}/join-as-panelist`),
 };
 
 // ─── Question endpoints ───────────────────────────────────────────────────────
@@ -122,5 +123,7 @@ export const roomAPI = {
   sync: (roomId, data) => api.post(`/api/rooms/${roomId}/sync`, data),
   close: (roomId) => api.post(`/api/rooms/${roomId}/close`),
 };
+
+
 
 export default api;

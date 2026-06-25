@@ -14,6 +14,7 @@ import videoInterview.Interview.repository.UserRepository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -29,18 +30,19 @@ public class InterviewService {
     public InterviewResponse createInterview(String interviewerId, CreateInterviewRequest request) {
 
         User interviewer = userRepository.findById(interviewerId)
-                .orElseThrow(() -> new RuntimeException("Interviewer not found"));
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
-        // Create interview with placeholder roomId first
         Interview interview = Interview.builder()
                 .interviewer(interviewer)
-                .roomId("pending")
+                .roomId(UUID.randomUUID().toString())
                 .status(Interview.Status.SCHEDULED)
                 .scheduledAt(request.getScheduledAt())
+                .maxInterviewers(request.getMaxInterviewers() != null
+                        ? request.getMaxInterviewers()
+                        : 1) // ← add this
                 .build();
 
         interviewRepository.save(interview);
-
         return toResponse(interview);
     }
     // ─── Candidate joins via room link ────────────────────────────────────────
@@ -170,6 +172,35 @@ public class InterviewService {
                 .orElseThrow(() -> new RuntimeException("Interview not found"));
         interview.setRoomId(roomId);
         interviewRepository.save(interview);
+        return toResponse(interview);
+    }
+
+    @Transactional
+    public InterviewResponse joinAsPanelist(String interviewId, String userId) {
+
+        Interview interview = interviewRepository.findById(interviewId)
+                .orElseThrow(() -> new RuntimeException("Interview not found"));
+
+        User panelist = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Don't add if already lead or already a panelist
+        if (interview.getInterviewer().getId().equals(userId)) {
+            return toResponse(interview); // already lead
+        }
+
+        boolean alreadyPanelist = interview.getPanelists()
+                .stream()
+                .anyMatch(p -> p.getId().equals(userId));
+
+        if (!alreadyPanelist) {
+            if (interview.getPanelists().size() >= interview.getMaxInterviewers() - 1) {
+                throw new RuntimeException("Panel is full");
+            }
+            interview.getPanelists().add(panelist);
+            interviewRepository.save(interview);
+        }
+
         return toResponse(interview);
     }
 }

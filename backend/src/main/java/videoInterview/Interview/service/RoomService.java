@@ -35,7 +35,7 @@ public class RoomService {
 
         Room room = Room.builder()
                 .interview(interview)
-                .language(Room.Language.JAVASCRIPT)  // default language
+                .language(Room.Language.JAVASCRIPT) // default language
                 .status(Room.Status.WAITING)
                 .build();
 
@@ -68,25 +68,29 @@ public class RoomService {
         Room room = roomRepository.findById(roomId)
                 .orElseThrow(() -> new RuntimeException("Room not found"));
 
-        // Max 2 participants — interviewer + candidate
-        if (room.getParticipantCount() >= 2) {
+        // Block if closed
+        if (room.getStatus() == Room.Status.CLOSED) {
+            throw new RuntimeException("This interview has ended");
+        }
+
+        // Dynamic max — interviewers + 1 candidate
+        int maxParticipants = room.getMaxParticipants();
+
+        if (room.getParticipantCount() >= maxParticipants) {
             throw new RuntimeException("Room is full");
         }
 
         room.setParticipantCount(room.getParticipantCount() + 1);
 
-        // Both joined — lock the room
-        if (room.getParticipantCount() == 2) {
+        if (room.getParticipantCount() >= maxParticipants) {
             room.setStatus(Room.Status.LOCKED);
         } else {
             room.setStatus(Room.Status.ACTIVE);
         }
 
         roomRepository.save(room);
-
         return toResponse(room);
     }
-
     // ─── Participant leaves room ──────────────────────────────────────────────
 
     @Transactional
@@ -178,6 +182,7 @@ public class RoomService {
                 .language(room.getLanguage().name())
                 .status(room.getStatus().name())
                 .participantCount(room.getParticipantCount())
+                .maxParticipants(room.getMaxParticipants()) // ← add this
                 .build();
     }
 }

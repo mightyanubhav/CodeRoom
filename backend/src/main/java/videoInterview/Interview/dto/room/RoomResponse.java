@@ -15,4 +15,5 @@ public class RoomResponse {
     private String language;
     private String status;
     private Integer participantCount;
+    private Integer maxParticipants;   // ← add this
 }
