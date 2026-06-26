@@ -106,7 +106,7 @@ const Dashboard = () => {
   const formatDuration = (startedAt, endedAt) => {
     if (!startedAt || !endedAt) return null;
     const minutes = Math.round(
-      (new Date(endedAt) - new Date(startedAt)) / 60000
+      (new Date(endedAt) - new Date(startedAt)) / 60000,
     );
     return `${minutes} min`;
   };
@@ -114,14 +114,16 @@ const Dashboard = () => {
   // ─── Status badge ──────────────────────────────────────────────────────────
   const StatusBadge = ({ status }) => {
     const styles = {
-      SCHEDULED:   "bg-[#1f3244] text-[#58a6ff] border-[#1f3244]",
+      SCHEDULED: "bg-[#1f3244] text-[#58a6ff] border-[#1f3244]",
       IN_PROGRESS: "bg-[#1a2f1a] text-[#3fb950] border-[#238636]",
-      COMPLETED:   "bg-[#1f1f2e] text-[#8b949e] border-[#30363d]",
-      REVIEWED:    "bg-[#2d1f47] text-[#bc8cff] border-[#8957e5]",
-      CANCELLED:   "bg-[#2d1318] text-[#f85149] border-[#da3633]",
+      COMPLETED: "bg-[#1f1f2e] text-[#8b949e] border-[#30363d]",
+      REVIEWED: "bg-[#2d1f47] text-[#bc8cff] border-[#8957e5]",
+      CANCELLED: "bg-[#2d1318] text-[#f85149] border-[#da3633]",
     };
     return (
-      <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${styles[status] || styles.SCHEDULED}`}>
+      <span
+        className={`text-xs px-2 py-0.5 rounded-full border font-medium ${styles[status] || styles.SCHEDULED}`}
+      >
         {status.replace("_", " ")}
       </span>
     );
@@ -132,9 +134,19 @@ const Dashboard = () => {
       {/* Navbar */}
       <nav className="bg-[#161b22] border-b border-[#30363d] px-6 py-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <h1 className="text-xl font-bold">
-            Code<span className="text-[#238636]">Room</span>
-          </h1>
+          <div className="flex items-center gap-6">
+            <h1 className="text-xl font-bold">
+              Code<span className="text-[#238636]">Room</span>
+            </h1>
+            {isInterviewer() && (
+              <button
+                onClick={() => navigate("/questions")}
+                className="text-sm text-[#8b949e] hover:text-white transition-colors"
+              >
+                Question Bank
+              </button>
+            )}
+          </div>
           <div className="flex items-center gap-4">
             <div className="text-right">
               <p className="text-sm text-white font-medium">{user?.email}</p>
@@ -176,10 +188,17 @@ const Dashboard = () => {
         {/* Create form */}
         {showCreateForm && (
           <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-6 mb-6">
-            <h3 className="text-white font-semibold mb-4">Schedule Interview</h3>
-            <form onSubmit={handleCreateInterview} className="flex items-end gap-4 flex-wrap">
+            <h3 className="text-white font-semibold mb-4">
+              Schedule Interview
+            </h3>
+            <form
+              onSubmit={handleCreateInterview}
+              className="flex items-end gap-4 flex-wrap"
+            >
               <div className="flex-1 min-w-48">
-                <label className="block text-sm text-[#8b949e] mb-1.5">Date & Time</label>
+                <label className="block text-sm text-[#8b949e] mb-1.5">
+                  Date & Time
+                </label>
                 <input
                   type="datetime-local"
                   value={scheduledAt}
@@ -225,9 +244,24 @@ const Dashboard = () => {
         {/* Interview list */}
         {isLoading ? (
           <div className="flex items-center justify-center py-20">
-            <svg className="animate-spin h-8 w-8 text-[#238636]" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+            <svg
+              className="animate-spin h-8 w-8 text-[#238636]"
+              viewBox="0 0 24 24"
+              fill="none"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8v8z"
+              />
             </svg>
           </div>
         ) : interviews.length === 0 ? (
@@ -265,17 +299,23 @@ const Dashboard = () => {
 
                   {interview.score && (
                     <div className="flex items-center gap-2 mt-1">
-                      <span className={`text-sm font-bold ${
-                        interview.score >= 7 ? "text-[#3fb950]" :
-                        interview.score >= 5 ? "text-[#d29922]" :
-                        "text-[#f85149]"
-                      }`}>
+                      <span
+                        className={`text-sm font-bold ${
+                          interview.score >= 7
+                            ? "text-[#3fb950]"
+                            : interview.score >= 5
+                              ? "text-[#d29922]"
+                              : "text-[#f85149]"
+                        }`}
+                      >
                         {interview.score}/10
                       </span>
                       <span className="text-xs text-[#8b949e]">
-                        {interview.score >= 7 ? "✅ Proceed" :
-                         interview.score >= 5 ? "⚠️ Consider" :
-                         "❌ Reject"}
+                        {interview.score >= 7
+                          ? "✅ Proceed"
+                          : interview.score >= 5
+                            ? "⚠️ Consider"
+                            : "❌ Reject"}
                       </span>
                     </div>
                   )}
@@ -289,13 +329,14 @@ const Dashboard = () => {
 
                 {/* Right — actions */}
                 <div className="flex items-center gap-2">
-
                   {/* Active interview — show links + join */}
                   {isActive(interview.status) && (
                     <>
                       {/* Candidate link */}
                       <button
-                        onClick={() => handleCopyCandidateLink(interview.roomId)}
+                        onClick={() =>
+                          handleCopyCandidateLink(interview.roomId)
+                        }
                         className="text-xs text-[#8b949e] hover:text-white border border-[#30363d] hover:border-[#484f58] px-3 py-1.5 rounded-lg transition-colors"
                       >
                         Copy Candidate Link
@@ -304,7 +345,9 @@ const Dashboard = () => {
                       {/* Panelist link — only if panel > 1 */}
                       {interview.maxInterviewers > 1 && (
                         <button
-                          onClick={() => handleCopyInterviewerLink(interview.roomId)}
+                          onClick={() =>
+                            handleCopyInterviewerLink(interview.roomId)
+                          }
                           className="text-xs text-[#58a6ff] hover:text-white border border-[#1f3244] hover:border-[#58a6ff] px-3 py-1.5 rounded-lg transition-colors"
                         >
                           Copy Panelist Link

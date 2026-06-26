@@ -4,6 +4,8 @@ import Login from './pages/auth/Login.jsx';
 import Register from './pages/auth/Register.jsx';
 import Dashboard from './pages/dashboard/Dashboard.jsx';
 import InterviewRoom from './pages/interview/InterviewRoom.jsx';
+import QuestionBank from './pages/questions/QuestionBank.jsx';
+import CreateQuestion from './pages/questions/CreateQuestion.jsx';
 import ProtectedRoute from './components/shared/ProtectedRoute.jsx';
 import useAuthStore from './store/authStore.js';
 
@@ -48,6 +50,22 @@ function App() {
                     element={
                         <ProtectedRoute>
                             <InterviewRoom />
+                        </ProtectedRoute>
+                    }
+                />
+                <Route
+                    path="/questions"
+                    element={
+                        <ProtectedRoute>
+                            <QuestionBank />
+                        </ProtectedRoute>
+                    }
+                />
+                <Route
+                    path="/questions/create"
+                    element={
+                        <ProtectedRoute>
+                            <CreateQuestion />
                         </ProtectedRoute>
                     }
                 />

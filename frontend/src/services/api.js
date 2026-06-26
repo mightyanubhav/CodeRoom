@@ -124,6 +124,8 @@ export const roomAPI = {
   close: (roomId) => api.post(`/api/rooms/${roomId}/close`),
 };
 
-
+export const aiAPI = {
+    chat: (data) => api.post('/api/ai/chat', data),
+};
 
 export default api;

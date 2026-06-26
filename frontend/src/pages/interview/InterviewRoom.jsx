@@ -20,11 +20,12 @@ import CodeEditor from "../../components/editor/CodeEditor.jsx";
 import VideoPanel from "../../components/video/VideoPanel.jsx";
 import RoomControls from "../../components/room/RoomControls.jsx";
 import ScoreModal from "../../components/room/ScoreModal.jsx";
+import AICopilotPanel from "../../components/room/AICopilotPanel.jsx";
 
 const InterviewRoom = () => {
   const { roomId } = useParams();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams(); 
+  const [searchParams] = useSearchParams();
   const urlRole = searchParams.get("role");
   const { user, accessToken, isInterviewer } = useAuthStore();
   const {
@@ -246,18 +247,6 @@ const InterviewRoom = () => {
     changeLanguage(roomId, newLanguage);
   };
 
-  // ─── End interview ────────────────────────────────────────────────────────
-  //   const handleEndInterview = async () => {
-  //     try {
-  //       const response = await interviewAPI.end(roomId); // ← capture response
-  //       setInterviewRoomId(response.data.roomId);
-  //       setShowScoreModal(true);
-  //       toast.success("Interview ended");
-  //     } catch (err) {
-  //       console.log(err);
-  //       toast.error("Failed to end interview");
-  //     }
-  //   };
   const handleEndInterview = async () => {
     try {
       const response = await interviewAPI.end(roomId);
@@ -524,11 +513,22 @@ const InterviewRoom = () => {
         </div>
 
         {/* Video panel */}
-        {showVideo && (
-          <div className="w-72 bg-[#161b22] border-l border-[#30363d] shrink-0">
-            <VideoPanel roomId={roomId} participants={participants}/>
-          </div>
-        )}
+        {/* Right panel — Video + AI Copilot */}
+        <div className="w-80 bg-[#161b22] border-l border-[#30363d] shrink-0 flex flex-col overflow-hidden">
+          {/* Video panel */}
+          {showVideo && (
+            <div className={`shrink-0 ${isInterviewer() ? "h-64" : "flex-1"}`}>
+              <VideoPanel roomId={roomId} participants={participants} />
+            </div>
+          )}
+
+          {/* AI Copilot — interviewer only */}
+          {isInterviewer() && (
+            <div className="flex-1 overflow-hidden flex flex-col">
+              <AICopilotPanel />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Room controls — bottom bar */}
