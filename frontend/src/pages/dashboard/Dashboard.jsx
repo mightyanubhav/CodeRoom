@@ -97,6 +97,11 @@ const Dashboard = () => {
     toast.success("Panelist link copied!");
   };
 
+  const handleCopyRecordingLink = (recordingUrl) => {
+    navigator.clipboard.writeText(recordingUrl);
+    toast.success("Recording link copied!");
+  };
+
   // ─── Join room ─────────────────────────────────────────────────────────────
   const handleJoinRoom = (roomId) => {
     navigate(`/room/${roomId}`);
@@ -325,6 +330,15 @@ const Dashboard = () => {
                       "{interview.notes}"
                     </p>
                   )}
+
+                  {interview.recordingUrl && (
+                    <span className="inline-flex items-center gap-1 text-xs text-[#bc8cff] mt-1">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/>
+                      </svg>
+                      Recording available
+                    </span>
+                  )}
                 </div>
 
                 {/* Right — actions */}
@@ -382,6 +396,31 @@ const Dashboard = () => {
                     <span className="text-xs text-[#8b949e] border border-[#30363d] px-3 py-1.5 rounded-lg">
                       Reviewed ✓
                     </span>
+                  )}
+
+                  {/* Recording link — show for any interview with a recording */}
+                  {interview.recordingUrl && (
+                    <>
+                      <button
+                        onClick={() => handleCopyRecordingLink(interview.recordingUrl)}
+                        className="text-xs text-[#bc8cff] hover:text-white border border-[#2d1f47] hover:border-[#bc8cff] px-3 py-1.5 rounded-lg transition-colors"
+                        title="Copy recording link to share with team"
+                      >
+                        Copy Recording Link
+                      </button>
+                      <a
+                        href={interview.recordingUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-[#8b949e] hover:text-white border border-[#30363d] hover:border-[#484f58] px-3 py-1.5 rounded-lg transition-colors inline-flex items-center gap-1"
+                        title="Watch recording"
+                      >
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M8 5v14l11-7z"/>
+                        </svg>
+                        Watch
+                      </a>
+                    </>
                   )}
                 </div>
               </div>
