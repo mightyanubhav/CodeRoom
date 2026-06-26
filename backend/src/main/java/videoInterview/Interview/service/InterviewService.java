@@ -156,10 +156,15 @@ public class InterviewService {
                 .score(interview.getScore())
                 .notes(interview.getNotes())
                 .interviewerName(interview.getInterviewer().getName())
-                .candidateName(interview.getCandidate() != null ? interview.getCandidate().getName() : null)
+                .candidateName(interview.getCandidate() != null
+                        ? interview.getCandidate().getName()
+                        : null)
+                .createdById(interview.getInterviewer().getId()) // ← lead interviewer ID
+                .recordingUrl(interview.getRecordingUrl()) // ← R2 URL
                 .build();
     }
 
+    @Transactional(readOnly = true)
     public InterviewResponse getByRoomEntityId(String roomEntityId) {
         Room room = roomRepository.findById(roomEntityId)
                 .orElseThrow(() -> new RuntimeException("Room not found"));

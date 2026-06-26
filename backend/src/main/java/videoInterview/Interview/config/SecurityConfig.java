@@ -71,7 +71,8 @@ public class SecurityConfig {
                                                 .hasRole("INTERVIEWER")
                                                 .requestMatchers(
                                                                 "/api/interviews/create",
-                                                                "/api/ai/**"          // ← AI copilot
+                                                                "/api/ai/**",
+                                                                "/api/recordings/**"
                                                 ).hasRole("INTERVIEWER")
 
                                                 // ── Everything else needs valid token ─────────

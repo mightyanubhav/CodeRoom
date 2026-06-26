@@ -23,5 +23,35 @@
     "name": "gemini.api.key",
     "type": "java.lang.String",
     "description": "A description for 'gemini.api.key'"
+  },
+  {
+    "name": "r2.public.url",
+    "type": "java.lang.String",
+    "description": "A description for 'r2.public.url'"
+  },
+  {
+    "name": "r2.endpoint",
+    "type": "java.lang.String",
+    "description": "A description for 'r2.endpoint'"
+  },
+  {
+    "name": "r2.bucket.name",
+    "type": "java.lang.String",
+    "description": "A description for 'r2.bucket.name'"
+  },
+  {
+    "name": "r2.secret.key",
+    "type": "java.lang.String",
+    "description": "A description for 'r2.secret.key'"
+  },
+  {
+    "name": "r2.access.key",
+    "type": "java.lang.String",
+    "description": "A description for 'r2.access.key'"
+  },
+  {
+    "name": "r2.account.id",
+    "type": "java.lang.String",
+    "description": "A description for 'r2.account.id'"
   }
 ]}

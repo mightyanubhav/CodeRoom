@@ -25,15 +25,15 @@ import AICopilotPanel from "../../components/room/AICopilotPanel.jsx";
 
 // ─── Handle language change ───────────────────────────────────────────────
 const STARTER_TEMPLATES = {
-    PYTHON: `import sys\n\ndef solution(data):\n    # Write your solution here\n    pass\n\ndata = sys.stdin.read().strip()\nprint(solution(data))\n`,
+  PYTHON: `import sys\n\ndef solution(data):\n    # Write your solution here\n    pass\n\ndata = sys.stdin.read().strip()\nprint(solution(data))\n`,
 
-    JAVASCRIPT: `const readline = require('readline');\nconst rl = readline.createInterface({ input: process.stdin });\nlet lines = [];\nrl.on('line', line => lines.push(line));\nrl.on('close', () => {\n    // lines[0], lines[1], ... contain your input\n    // Write your solution here\n    console.log(lines[0]);\n});\n`,
+  JAVASCRIPT: `const readline = require('readline');\nconst rl = readline.createInterface({ input: process.stdin });\nlet lines = [];\nrl.on('line', line => lines.push(line));\nrl.on('close', () => {\n    // lines[0], lines[1], ... contain your input\n    // Write your solution here\n    console.log(lines[0]);\n});\n`,
 
-    JAVA: `import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        String input = sc.nextLine();\n        \n        // Write your solution here\n        System.out.println(input);\n    }\n}\n`,
+  JAVA: `import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        String input = sc.nextLine();\n        \n        // Write your solution here\n        System.out.println(input);\n    }\n}\n`,
 
-    GO: `package main\n\nimport (\n    "bufio"\n    "fmt"\n    "os"\n)\n\nfunc main() {\n    reader := bufio.NewReader(os.Stdin)\n    input, _ := reader.ReadString('\\\\n')\n    \n    // Write your solution here\n    fmt.Println(input)\n}\n`,
+  GO: `package main\n\nimport (\n    "bufio"\n    "fmt"\n    "os"\n)\n\nfunc main() {\n    reader := bufio.NewReader(os.Stdin)\n    input, _ := reader.ReadString('\\\\n')\n    \n    // Write your solution here\n    fmt.Println(input)\n}\n`,
 
-    CPP: `#include <iostream>\n#include <string>\nusing namespace std;\n\nint main() {\n    string input;\n    getline(cin, input);\n    \n    // Write your solution here\n    cout << input << endl;\n    return 0;\n}\n`,
+  CPP: `#include <iostream>\n#include <string>\nusing namespace std;\n\nint main() {\n    string input;\n    getline(cin, input);\n    \n    // Write your solution here\n    cout << input << endl;\n    return 0;\n}\n`,
 };
 
 // ─── Test case results — LeetCode style ──────────────────────────────────────
@@ -147,6 +147,8 @@ const InterviewRoom = () => {
   const debounceRef = useRef(null);
   const [showScoreModal, setShowScoreModal] = useState(false);
   const [interviewRoomId, setInterviewRoomId] = useState(null);
+  const [interviewId, setInterviewId] = useState(null);
+  const [isLeadInterviewer, setIsLeadInterviewer] = useState(false);
   const showScoreModalRef = useRef(false);
 
   const socketRef = useRef(null);
@@ -155,6 +157,28 @@ const InterviewRoom = () => {
   useEffect(() => {
     codeRef.current = currentCode;
   }, [currentCode]);
+
+  // Reliably determine lead-interviewer status once the room is connected.
+  // This runs independently of the ROOM_STATE socket handler so a transient
+  // network error in that handler can't silently leave isLeadInterviewer=false.
+  useEffect(() => {
+    if (!isConnected || !user || user.role !== "INTERVIEWER") return;
+
+    const fetchLeadStatus = async () => {
+      try {
+        const res = await interviewAPI.getByRoomEntityId(roomId);
+        const interview = res.data;
+        if (!interviewId) setInterviewId(interview.id);
+        const isLead = interview.createdById === user.id;
+        setIsLeadInterviewer(isLead);
+        console.log(`👑 isLeadInterviewer: ${isLead} (createdById=${interview.createdById}, userId=${user.id})`);
+      } catch (err) {
+        console.error("fetchLeadStatus failed:", err.message);
+      }
+    };
+
+    fetchLeadStatus();
+  }, [isConnected, roomId]);
 
   // ─── Initialize socket + join room ────────────────────────────────────────
   useEffect(() => {
@@ -200,7 +224,6 @@ const InterviewRoom = () => {
         const { user } = useAuthStore.getState();
 
         if (user?.role === "CANDIDATE") {
-          // Candidate join flow — existing logic
           try {
             const interviewRes = await interviewAPI.getByRoomEntityId(roomId);
             const interview = interviewRes.data;
@@ -210,14 +233,23 @@ const InterviewRoom = () => {
           } catch (err) {
             console.log("Join interview error:", err.message);
           }
-        } else if (user?.role === "INTERVIEWER" && urlRole === "interviewer") {
-          // Panelist joining via panelist link
+        } else if (user?.role === "INTERVIEWER") {
           try {
             const interviewRes = await interviewAPI.getByRoomEntityId(roomId);
-            await interviewAPI.joinAsPanelist(interviewRes.data.id);
-            console.log("✅ Joined as panelist");
+            const interview = interviewRes.data;
+            setInterviewId(interview.id);
+
+            // Check if current user is lead interviewer (created the interview)
+            const isLead = interview.createdById === user?.id;
+            setIsLeadInterviewer(isLead);
+            console.log(`👤 Lead interviewer: ${isLead}`);
+
+            if (urlRole === "interviewer") {
+              await interviewAPI.joinAsPanelist(interview.id);
+              console.log("✅ Joined as panelist");
+            }
           } catch (err) {
-            console.log("Panelist join:", err.message);
+            console.log("Interviewer join:", err.message);
           }
         }
       });
@@ -633,7 +665,12 @@ const InterviewRoom = () => {
           {/* Video panel */}
           {showVideo && (
             <div className={`shrink-0 ${isInterviewer() ? "h-64" : "flex-1"}`}>
-              <VideoPanel roomId={roomId} participants={participants} />
+              <VideoPanel
+                roomId={roomId}
+                participants={participants}
+                isLeadInterviewer={isLeadInterviewer}
+                interviewId={interviewId}
+              />
             </div>
           )}
 

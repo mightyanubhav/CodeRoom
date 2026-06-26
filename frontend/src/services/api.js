@@ -127,5 +127,12 @@ export const roomAPI = {
 export const aiAPI = {
     chat: (data) => api.post('/api/ai/chat', data),
 };
+export const recordingAPI = {
+    upload: (interviewId, formData) => api.post(
+        `/api/recordings/upload/${interviewId}`,
+        formData,
+        { headers: { 'Content-Type': 'multipart/form-data' } }
+    ),
+};
 
 export default api;

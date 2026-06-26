@@ -29,11 +29,7 @@ public class Interview {
 
     // Additional panelist interviewers
     @ManyToMany(fetch = FetchType.LAZY)
-    @JoinTable(
-        name = "interview_panelists",
-        joinColumns = @JoinColumn(name = "interview_id"),
-        inverseJoinColumns = @JoinColumn(name = "user_id")
-    )
+    @JoinTable(name = "interview_panelists", joinColumns = @JoinColumn(name = "interview_id"), inverseJoinColumns = @JoinColumn(name = "user_id"))
     @Builder.Default
     private List<User> panelists = new ArrayList<>();
 
@@ -90,4 +86,7 @@ public class Interview {
         REVIEWED,
         CANCELLED
     }
+
+    @Column(name = "recording_url")
+    private String recordingUrl;
 }

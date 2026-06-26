@@ -17,4 +17,6 @@ public class InterviewResponse {
     private String notes;
     private String interviewerName;
     private String candidateName;
+    private String createdById;      // ← lead interviewer's user ID
+    private String recordingUrl;     // ← R2 recording URL
 }
