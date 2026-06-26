@@ -10,7 +10,7 @@ const ICE_SERVERS = {
   ],
 };
 
-const VideoPanel = ({ roomId }) => {
+const VideoPanel = ({ roomId, participants = [] }) => {
   const { user } = useAuthStore();
 
   const localVideoRef = useRef(null);
@@ -28,42 +28,10 @@ const VideoPanel = ({ roomId }) => {
   const [remoteVideos, setRemoteVideos] = useState({});
   const [connectedCount, setConnectedCount] = useState(0);
 
-  useEffect(() => {
-    userRef.current = user;
-  }, [user]);
-  useEffect(() => {
-    roomIdRef.current = roomId;
-  }, [roomId]);
+  useEffect(() => { userRef.current = user; }, [user]);
+  useEffect(() => { roomIdRef.current = roomId; }, [roomId]);
 
-  // ─── Auto start call when component mounts ────────────────────────────────
-  // useEffect(() => {
-  //     const startCallAutomatically = async () => {
-  //         try {
-  //             await getUserMedia();
-  //             isCallActiveRef.current = true;
-  //             const socket = getSocket();
-  //             if (socket?.connected) {
-  //                 socket.emit('webrtc:start_call', { roomId });
-  //             } else {
-  //                 // Wait for socket then start
-  //                 const interval = setInterval(() => {
-  //                     const s = getSocket();
-  //                     if (s?.connected) {
-  //                         clearInterval(interval);
-  //                         s.emit('webrtc:start_call', { roomId });
-  //                     }
-  //                 }, 500);
-  //             }
-  //         } catch (err) {
-  //             console.error('Auto start call error:', err.message);
-  //         }
-  //     };
-
-  //     // Small delay to let socket setup complete
-  //     const timer = setTimeout(startCallAutomatically, 1500);
-  //     return () => clearTimeout(timer);
-  // }, [roomId]);
-
+  // ─── Auto start call when room state received ─────────────────────────────
   useEffect(() => {
     const startWhenReady = () => {
       const socket = getSocket();
@@ -72,7 +40,6 @@ const VideoPanel = ({ roomId }) => {
         return;
       }
 
-      // Start call when room state received — guaranteed connected
       socket.once(SOCKET_EVENTS.ROOM_STATE, async () => {
         try {
           await getUserMedia();
@@ -83,10 +50,7 @@ const VideoPanel = ({ roomId }) => {
         }
       });
 
-      // If already connected and in room — start immediately
-      if (socket.connected && isCallActiveRef.current === false) {
-        // Check if room state already received by trying to start
-        // after short delay
+      if (socket.connected && !isCallActiveRef.current) {
         setTimeout(async () => {
           if (!isCallActiveRef.current) {
             try {
@@ -103,6 +67,7 @@ const VideoPanel = ({ roomId }) => {
 
     startWhenReady();
   }, [roomId]);
+
   // ─── Get user media ───────────────────────────────────────────────────────
   const getUserMedia = async () => {
     if (localStreamRef.current) return localStreamRef.current;
@@ -130,100 +95,88 @@ const VideoPanel = ({ roomId }) => {
   }, []);
 
   // ─── Create peer connection ───────────────────────────────────────────────
-  const createPeerConnection = useCallback(
-    (targetUserId) => {
-      if (peerConnectionsRef.current[targetUserId]) {
-        peerConnectionsRef.current[targetUserId].close();
-      }
+  const createPeerConnection = useCallback((targetUserId) => {
+    if (peerConnectionsRef.current[targetUserId]) {
+      peerConnectionsRef.current[targetUserId].close();
+    }
 
-      const pc = new RTCPeerConnection(ICE_SERVERS);
+    const pc = new RTCPeerConnection(ICE_SERVERS);
 
-      pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          const socket = getSocket();
-          socket?.emit("webrtc:ice_candidate", {
-            roomId: roomIdRef.current,
-            candidate: event.candidate,
-            targetUserId,
-          });
-        }
-      };
-
-      pc.ontrack = (event) => {
-        console.log("🎥 Got remote stream from", targetUserId);
-        const stream = event.streams[0];
-        setRemoteVideos((prev) => {
-          const next = { ...prev, [targetUserId]: stream };
-          setConnectedCount(Object.keys(next).length);
-          return next;
-        });
-      };
-
-      pc.onconnectionstatechange = () => {
-        console.log(`Connection ${targetUserId}:`, pc.connectionState);
-        if (
-          pc.connectionState === "failed" ||
-          pc.connectionState === "disconnected"
-        ) {
-          removePeer(targetUserId);
-        }
-      };
-
-      peerConnectionsRef.current[targetUserId] = pc;
-      return pc;
-    },
-    [removePeer],
-  );
-
-  // ─── Send offer to specific user ──────────────────────────────────────────
-  const sendOfferTo = useCallback(
-    async (targetUserId) => {
-      try {
-        if (peerConnectionsRef.current[targetUserId]) return;
-        console.log("📤 Sending offer to", targetUserId);
-        const stream = await getUserMedia();
-        const pc = createPeerConnection(targetUserId);
-        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
         const socket = getSocket();
-        socket?.emit("webrtc:offer", {
+        socket?.emit("webrtc:ice_candidate", {
           roomId: roomIdRef.current,
-          offer,
-          fromUserId: userRef.current?.id,
+          candidate: event.candidate,
           targetUserId,
         });
-      } catch (err) {
-        console.error("Send offer error:", err.message);
       }
-    },
-    [createPeerConnection],
-  );
+    };
+
+    pc.ontrack = (event) => {
+      console.log("🎥 Got remote stream from", targetUserId);
+      const stream = event.streams[0];
+      setRemoteVideos((prev) => {
+        const next = { ...prev, [targetUserId]: stream };
+        setConnectedCount(Object.keys(next).length);
+        return next;
+      });
+    };
+
+    pc.onconnectionstatechange = () => {
+      console.log(`Connection ${targetUserId}:`, pc.connectionState);
+      if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+        removePeer(targetUserId);
+      }
+    };
+
+    peerConnectionsRef.current[targetUserId] = pc;
+    return pc;
+  }, [removePeer]);
+
+  // ─── Send offer ───────────────────────────────────────────────────────────
+  const sendOfferTo = useCallback(async (targetUserId) => {
+    try {
+      if (peerConnectionsRef.current[targetUserId]) return;
+      console.log("📤 Sending offer to", targetUserId);
+      const stream = await getUserMedia();
+      const pc = createPeerConnection(targetUserId);
+      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      const socket = getSocket();
+      socket?.emit("webrtc:offer", {
+        roomId: roomIdRef.current,
+        offer,
+        fromUserId: userRef.current?.id,
+        targetUserId,
+      });
+    } catch (err) {
+      console.error("Send offer error:", err.message);
+    }
+  }, [createPeerConnection]);
 
   // ─── Handle incoming offer ────────────────────────────────────────────────
-  const handleIncomingOffer = useCallback(
-    async (offer, fromUserId) => {
-      try {
-        console.log("📥 Got offer from", fromUserId);
-        const stream = await getUserMedia();
-        const pc = createPeerConnection(fromUserId);
-        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-        await pc.setRemoteDescription(new RTCSessionDescription(offer));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        const socket = getSocket();
-        socket?.emit("webrtc:answer", {
-          roomId: roomIdRef.current,
-          answer,
-          targetUserId: fromUserId,
-        });
-        isCallActiveRef.current = true;
-      } catch (err) {
-        console.error("Handle offer error:", err.message);
-      }
-    },
-    [createPeerConnection],
-  );
+  const handleIncomingOffer = useCallback(async (offer, fromUserId) => {
+    try {
+      console.log("📥 Got offer from", fromUserId);
+      const stream = await getUserMedia();
+      const pc = createPeerConnection(fromUserId);
+      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      const socket = getSocket();
+      socket?.emit("webrtc:answer", {
+        roomId: roomIdRef.current,
+        answer,
+        targetUserId: fromUserId,
+      });
+      isCallActiveRef.current = true;
+    } catch (err) {
+      console.error("Handle offer error:", err.message);
+    }
+  }, [createPeerConnection]);
 
   // ─── Socket listeners ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -305,17 +258,13 @@ const VideoPanel = ({ roomId }) => {
 
   // ─── Toggle mute ──────────────────────────────────────────────────────────
   const handleToggleMute = () => {
-    localStreamRef.current?.getAudioTracks().forEach((t) => {
-      t.enabled = !t.enabled;
-    });
+    localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = !t.enabled; });
     setIsMuted((p) => !p);
   };
 
   // ─── Toggle camera ────────────────────────────────────────────────────────
   const handleToggleCamera = () => {
-    localStreamRef.current?.getVideoTracks().forEach((t) => {
-      t.enabled = !t.enabled;
-    });
+    localStreamRef.current?.getVideoTracks().forEach((t) => { t.enabled = !t.enabled; });
     setIsCameraOff((p) => !p);
   };
 
@@ -348,7 +297,7 @@ const VideoPanel = ({ roomId }) => {
     setIsRecording(false);
   };
 
-  // ─── Cleanup on unmount ───────────────────────────────────────────────────
+  // ─── Cleanup ──────────────────────────────────────────────────────────────
   useEffect(() => {
     return () => {
       Object.values(peerConnectionsRef.current).forEach((pc) => pc.close());
@@ -356,29 +305,39 @@ const VideoPanel = ({ roomId }) => {
     };
   }, []);
 
+  // ─── Separate candidate from interviewers ─────────────────────────────────
   const remoteVideoEntries = Object.entries(remoteVideos);
+
+  const candidateEntry = remoteVideoEntries.find(([userId]) => {
+    const p = participants.find((p) => p.userId === userId);
+    return p?.role === "CANDIDATE";
+  });
+
+  const interviewerEntries = remoteVideoEntries.filter(([userId]) => {
+    const p = participants.find((p) => p.userId === userId);
+    return p?.role !== "CANDIDATE";
+  });
+
+  // If no role info yet — show all equal
+  const hasRoleInfo = participants.length > 0;
 
   return (
     <div className="h-full flex flex-col bg-[#161b22]">
+
       {/* Header */}
       <div className="px-3 py-2 border-b border-[#30363d] flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <div className="w-1.5 h-1.5 bg-[#3fb950] rounded-full animate-pulse" />
           <span className="text-xs text-[#8b949e] font-medium">
-            Live · {connectedCount + 1} participant
-            {connectedCount + 1 !== 1 ? "s" : ""}
+            Live · {connectedCount + 1} participant{connectedCount + 1 !== 1 ? "s" : ""}
           </span>
         </div>
-
-        {/* Mute + Camera controls in header */}
         <div className="flex items-center gap-1">
           <button
             onClick={handleToggleMute}
             title={isMuted ? "Unmute" : "Mute"}
             className={`p-1.5 rounded-lg text-xs transition-colors ${
-              isMuted
-                ? "bg-[#da3633] text-white"
-                : "bg-[#21262d] text-[#8b949e] hover:text-white"
+              isMuted ? "bg-[#da3633] text-white" : "bg-[#21262d] text-[#8b949e] hover:text-white"
             }`}
           >
             {isMuted ? "🔇" : "🎤"}
@@ -387,9 +346,7 @@ const VideoPanel = ({ roomId }) => {
             onClick={handleToggleCamera}
             title={isCameraOff ? "Turn camera on" : "Turn camera off"}
             className={`p-1.5 rounded-lg text-xs transition-colors ${
-              isCameraOff
-                ? "bg-[#da3633] text-white"
-                : "bg-[#21262d] text-[#8b949e] hover:text-white"
+              isCameraOff ? "bg-[#da3633] text-white" : "bg-[#21262d] text-[#8b949e] hover:text-white"
             }`}
           >
             {isCameraOff ? "📵" : "📷"}
@@ -399,17 +356,45 @@ const VideoPanel = ({ roomId }) => {
 
       {/* Videos */}
       <div className="flex-1 flex flex-col gap-2 p-2 overflow-y-auto">
-        {/* Remote videos */}
+
         {remoteVideoEntries.length > 0 ? (
-          <div
-            className={`grid gap-2 ${
-              remoteVideoEntries.length === 1 ? "grid-cols-1" : "grid-cols-2"
-            }`}
-          >
-            {remoteVideoEntries.map(([userId, stream]) => (
+          <>
+            {/* Candidate video — large, always on top */}
+            {hasRoleInfo && candidateEntry && (
+              <div className="relative rounded-lg overflow-hidden bg-[#0d1117]">
+                <RemoteVideo stream={candidateEntry[1]} />
+                <div className="absolute bottom-1 left-2 flex items-center gap-1">
+                  <span className="text-xs text-white bg-black/60 px-1.5 py-0.5 rounded">
+                    🎯 Candidate
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Interviewer videos — small grid below */}
+            {hasRoleInfo && interviewerEntries.length > 0 && (
+              <div className={`grid gap-2 ${
+                interviewerEntries.length === 1 ? "grid-cols-1" : "grid-cols-2"
+              }`}>
+                {interviewerEntries.map(([userId, stream]) => {
+                  const p = participants.find((p) => p.userId === userId);
+                  return (
+                    <div key={userId} className="relative rounded-lg overflow-hidden bg-[#0d1117]">
+                      <RemoteVideo stream={stream} small />
+                      <span className="absolute bottom-1 left-2 text-xs text-white bg-black/60 px-1.5 py-0.5 rounded">
+                        {p?.email?.split("@")[0] || "Interviewer"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Fallback — no role info yet, show all equal */}
+            {!hasRoleInfo && remoteVideoEntries.map(([userId, stream]) => (
               <RemoteVideo key={userId} stream={stream} />
             ))}
-          </div>
+          </>
         ) : (
           <div className="flex-1 bg-[#0d1117] rounded-lg flex items-center justify-center min-h-24">
             <div className="text-center">
@@ -421,8 +406,8 @@ const VideoPanel = ({ roomId }) => {
           </div>
         )}
 
-        {/* Local video — always visible */}
-        <div className="h-28 bg-[#0d1117] rounded-lg overflow-hidden relative shrink-0">
+        {/* Local video */}
+        <div className="h-24 bg-[#0d1117] rounded-lg overflow-hidden relative shrink-0">
           <video
             ref={localVideoRef}
             autoPlay
@@ -457,10 +442,7 @@ const VideoPanel = ({ roomId }) => {
           }`}
         >
           {isRecording ? (
-            <>
-              <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
-              Stop Recording
-            </>
+            <><span className="w-2 h-2 bg-white rounded-full animate-pulse" />Stop Recording</>
           ) : (
             <>⏺ Record Session</>
           )}
@@ -471,7 +453,7 @@ const VideoPanel = ({ roomId }) => {
 };
 
 // ─── Remote video component ───────────────────────────────────────────────────
-const RemoteVideo = ({ stream }) => {
+const RemoteVideo = ({ stream, small = false }) => {
   const videoRef = useRef(null);
 
   useEffect(() => {
@@ -481,7 +463,9 @@ const RemoteVideo = ({ stream }) => {
   }, [stream]);
 
   return (
-    <div className="bg-[#0d1117] rounded-lg overflow-hidden relative aspect-video">
+    <div className={`bg-[#0d1117] rounded-lg overflow-hidden ${
+      small ? 'aspect-video' : 'aspect-video'
+    }`}>
       <video
         ref={videoRef}
         autoPlay

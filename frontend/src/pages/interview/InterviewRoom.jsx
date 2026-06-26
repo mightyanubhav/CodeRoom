@@ -526,7 +526,7 @@ const InterviewRoom = () => {
         {/* Video panel */}
         {showVideo && (
           <div className="w-72 bg-[#161b22] border-l border-[#30363d] shrink-0">
-            <VideoPanel roomId={roomId} />
+            <VideoPanel roomId={roomId} participants={participants}/>
           </div>
         )}
       </div>

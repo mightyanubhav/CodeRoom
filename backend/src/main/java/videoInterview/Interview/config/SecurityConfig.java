@@ -32,16 +32,13 @@ public class SecurityConfig {
         @Bean
         public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
                 http
-                                // Disable CSRF — we use JWT, not sessions/cookies
                                 .csrf(AbstractHttpConfigurer::disable)
                                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-
-                                // Stateless — Spring will never create an HTTP session
                                 .sessionManagement(session -> session
                                                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-
-                                // Route rules
                                 .authorizeHttpRequests(auth -> auth
+
+                                                // ── Public routes ─────────────────────────────
                                                 .requestMatchers(
                                                                 "/api/auth/register",
                                                                 "/api/auth/login",
@@ -55,13 +52,14 @@ public class SecurityConfig {
                                                                 "/api/execute",
                                                                 "/swagger-ui.html",
                                                                 "/swagger-ui/**",
-                                                                "/api-docs/**")
-                                                .permitAll()
+                                                                "/api-docs/**"
+                                                ).permitAll()
 
-                                                // Admin only
-                                                .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                                                // ── Admin only ────────────────────────────────
+                                                .requestMatchers("/api/admin/**")
+                                                .hasRole("ADMIN")
 
-                                                // Interviewers only — write operations
+                                                // ── Interviewer only ──────────────────────────
                                                 .requestMatchers(
                                                                 HttpMethod.POST, "/api/questions/**")
                                                 .hasRole("INTERVIEWER")
@@ -72,14 +70,15 @@ public class SecurityConfig {
                                                                 HttpMethod.DELETE, "/api/questions/**")
                                                 .hasRole("INTERVIEWER")
                                                 .requestMatchers(
-                                                                "/api/interviews/create")
-                                                .hasRole("INTERVIEWER")
+                                                                "/api/interviews/create",
+                                                                "/api/ai/**"          // ← AI copilot
+                                                ).hasRole("INTERVIEWER")
 
-                                                // Everything else needs a valid token
-                                                .anyRequest().authenticated())
-
-                                // Plug in our JWT filter before Spring's default login filter
-                                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+                                                // ── Everything else needs valid token ─────────
+                                                .anyRequest().authenticated()
+                                )
+                                .addFilterBefore(jwtAuthFilter,
+                                                UsernamePasswordAuthenticationFilter.class);
 
                 return http.build();
         }
@@ -99,14 +98,14 @@ public class SecurityConfig {
         public CorsConfigurationSource corsConfigurationSource() {
                 CorsConfiguration config = new CorsConfiguration();
 
-                // React dev server + production Vercel URL
                 config.setAllowedOrigins(List.of(
-                                "http://localhost:5173", // Vite dev server
-                                "http://localhost:3000", // fallback
-                                "https://coderoom.vercel.app" // production later
+                                "http://localhost:5173",
+                                "http://localhost:3000",
+                                "https://coderoom.vercel.app"
                 ));
 
-                config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
+                config.setAllowedMethods(List.of(
+                                "GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
                 config.setAllowedHeaders(List.of("*"));
                 config.setAllowCredentials(true);
 
