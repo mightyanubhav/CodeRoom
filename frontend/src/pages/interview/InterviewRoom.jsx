@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import axios from "axios";
 import toast from "react-hot-toast";
 import useAuthStore from "../../store/authStore.js";
 import useRoomStore from "../../store/roomStore.js";
@@ -15,12 +16,103 @@ import {
   loadQuestion,
   changeLanguage,
 } from "../../services/socket.js";
-import { SOCKET_EVENTS, LANGUAGES } from "../../utils/constants.js";
+import { SOCKET_EVENTS, LANGUAGES, API_URL } from "../../utils/constants.js";
 import CodeEditor from "../../components/editor/CodeEditor.jsx";
 import VideoPanel from "../../components/video/VideoPanel.jsx";
 import RoomControls from "../../components/room/RoomControls.jsx";
 import ScoreModal from "../../components/room/ScoreModal.jsx";
 import AICopilotPanel from "../../components/room/AICopilotPanel.jsx";
+
+// ─── Handle language change ───────────────────────────────────────────────
+const STARTER_TEMPLATES = {
+    PYTHON: `import sys\n\ndef solution(data):\n    # Write your solution here\n    pass\n\ndata = sys.stdin.read().strip()\nprint(solution(data))\n`,
+
+    JAVASCRIPT: `const readline = require('readline');\nconst rl = readline.createInterface({ input: process.stdin });\nlet lines = [];\nrl.on('line', line => lines.push(line));\nrl.on('close', () => {\n    // lines[0], lines[1], ... contain your input\n    // Write your solution here\n    console.log(lines[0]);\n});\n`,
+
+    JAVA: `import java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        String input = sc.nextLine();\n        \n        // Write your solution here\n        System.out.println(input);\n    }\n}\n`,
+
+    GO: `package main\n\nimport (\n    "bufio"\n    "fmt"\n    "os"\n)\n\nfunc main() {\n    reader := bufio.NewReader(os.Stdin)\n    input, _ := reader.ReadString('\\\\n')\n    \n    // Write your solution here\n    fmt.Println(input)\n}\n`,
+
+    CPP: `#include <iostream>\n#include <string>\nusing namespace std;\n\nint main() {\n    string input;\n    getline(cin, input);\n    \n    // Write your solution here\n    cout << input << endl;\n    return 0;\n}\n`,
+};
+
+// ─── Test case results — LeetCode style ──────────────────────────────────────
+const TestCaseResults = ({ results }) => {
+  const [activeTab, setActiveTab] = useState(0);
+  const active = results[activeTab];
+
+  return (
+    <div className="flex flex-col" style={{ maxHeight: "180px" }}>
+      {/* Test case tabs */}
+      <div className="flex items-center gap-1 px-3 pt-2 pb-0 overflow-x-auto shrink-0">
+        {results.map((r, i) => (
+          <button
+            key={i}
+            onClick={() => setActiveTab(i)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-t-lg text-xs font-medium transition-colors shrink-0 ${
+              activeTab === i
+                ? "bg-[#0d1117] text-white border border-b-0 border-[#30363d]"
+                : "text-[#8b949e] hover:text-white"
+            }`}
+          >
+            <span className={r.passed ? "text-[#3fb950]" : "text-[#f85149]"}>
+              {r.passed ? "●" : "●"}
+            </span>
+            Case {i + 1}
+          </button>
+        ))}
+      </div>
+
+      {/* Active test case detail */}
+      {active && (
+        <div className="flex-1 overflow-y-auto bg-[#0d1117] p-3 space-y-3">
+          {/* Input */}
+          {active.input && active.input !== "hidden" && (
+            <div>
+              <p className="text-xs text-[#484f58] mb-1">Input</p>
+              <pre className="text-xs text-[#c9d1d9] font-mono bg-[#161b22] rounded-lg px-3 py-2">
+                {active.input}
+              </pre>
+            </div>
+          )}
+
+          {/* Expected output */}
+          {active.expectedOutput && active.expectedOutput !== "hidden" && (
+            <div>
+              <p className="text-xs text-[#484f58] mb-1">Expected Output</p>
+              <pre className="text-xs text-[#3fb950] font-mono bg-[#161b22] rounded-lg px-3 py-2">
+                {active.expectedOutput}
+              </pre>
+            </div>
+          )}
+
+          {/* Actual output */}
+          <div>
+            <p className="text-xs text-[#484f58] mb-1">Your Output</p>
+            <pre
+              className={`text-xs font-mono bg-[#161b22] rounded-lg px-3 py-2 ${
+                active.passed ? "text-[#3fb950]" : "text-[#f85149]"
+              }`}
+            >
+              {active.actualOutput === "hidden"
+                ? active.passed
+                  ? "Correct ✓"
+                  : "Wrong answer"
+                : active.actualOutput || "(empty)"}
+            </pre>
+          </div>
+
+          {/* Hidden badge */}
+          {active.input === "hidden" && (
+            <p className="text-xs text-[#484f58]">
+              🔒 Hidden test case — input/output not shown
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const InterviewRoom = () => {
   const { roomId } = useParams();
@@ -97,6 +189,7 @@ const InterviewRoom = () => {
       socket.off(SOCKET_EVENTS.EDITOR_EXECUTION_STARTED);
       socket.off(SOCKET_EVENTS.EDITOR_EXECUTION_RESULT);
       socket.off(SOCKET_EVENTS.EDITOR_SAVED);
+      socket.off(SOCKET_EVENTS.AUTH_TOKEN_EXPIRED);
 
       // ── Room events ───────────────────────────────────────────────────────
       socket.on(SOCKET_EVENTS.ROOM_STATE, async (state) => {
@@ -187,6 +280,28 @@ const InterviewRoom = () => {
         console.log("✅ Auto saved");
       });
 
+      // JWT expired mid-session — refresh silently, socket reconnects automatically
+      socket.on(SOCKET_EVENTS.AUTH_TOKEN_EXPIRED, async () => {
+        const refreshToken = localStorage.getItem("refreshToken");
+        if (!refreshToken) {
+          navigate("/login");
+          return;
+        }
+        try {
+          // Use raw axios (not api instance) to avoid interceptor re-triggering
+          const res = await axios.post(
+            `${API_URL}/api/auth/refresh`,
+            {},
+            { headers: { "Refresh-Token": refreshToken } },
+          );
+          useAuthStore.getState().updateToken(res.data.accessToken);
+          toast("Session refreshed — run your code again", { icon: "🔄" });
+        } catch {
+          toast.error("Session expired — please log in again");
+          navigate("/login");
+        }
+      });
+
       // ── Join room ─────────────────────────────────────────────────────────
       const doJoin = () => {
         joinRoom(roomId);
@@ -225,6 +340,7 @@ const InterviewRoom = () => {
         s.off(SOCKET_EVENTS.EDITOR_EXECUTION_STARTED);
         s.off(SOCKET_EVENTS.EDITOR_EXECUTION_RESULT);
         s.off(SOCKET_EVENTS.EDITOR_SAVED);
+        s.off(SOCKET_EVENTS.AUTH_TOKEN_EXPIRED);
       }
     };
   }, [roomId, accessToken]);
@@ -240,11 +356,19 @@ const InterviewRoom = () => {
     },
     [roomId],
   );
-
-  // ─── Handle language change ───────────────────────────────────────────────
   const handleLanguageChange = (newLanguage) => {
     setLanguage(newLanguage);
     changeLanguage(roomId, newLanguage);
+
+    // Always update starter code when language changes
+    // regardless of what's currently in the editor
+    const template = STARTER_TEMPLATES[newLanguage];
+    if (template) {
+      setIsRemoteChange(true);
+      setCode(template);
+      sendCodeChange(roomId, template, null);
+      setTimeout(() => setIsRemoteChange(false), 100);
+    }
   };
 
   const handleEndInterview = async () => {
@@ -418,67 +542,58 @@ const InterviewRoom = () => {
           />
 
           {/* Execution result */}
+
           {executionResult && (
-            <div className="bg-[#161b22] border-t border-[#30363d] p-3 h-40 overflow-y-auto shrink-0">
-              <div className="flex items-center justify-between mb-2">
-                <span
-                  className={`text-xs font-medium ${
-                    executionResult.timedOut
-                      ? "text-[#d29922]"
+            <div className="bg-[#161b22] border-t border-[#30363d] shrink-0">
+              {/* Status bar */}
+              <div className="flex items-center justify-between px-4 py-2 border-b border-[#30363d]">
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`text-xs font-semibold ${
+                      executionResult.timedOut
+                        ? "text-[#d29922]"
+                        : executionResult.passed
+                          ? "text-[#3fb950]"
+                          : "text-[#f85149]"
+                    }`}
+                  >
+                    {executionResult.timedOut
+                      ? "⏱ Time Limit Exceeded"
                       : executionResult.passed
-                        ? "text-[#3fb950]"
-                        : "text-[#f85149]"
-                  }`}
-                >
-                  {executionResult.timedOut
-                    ? "⏱ Time limit exceeded"
-                    : executionResult.passed
-                      ? "✅ All tests passed"
-                      : "❌ Tests failed"}
-                </span>
-                {executionResult.executionTimeMs && (
-                  <span className="text-xs text-[#484f58]">
-                    {executionResult.executionTimeMs}ms
+                        ? "✅ Accepted"
+                        : "❌ Wrong Answer"}
+                  </span>
+                  {executionResult.executionTimeMs && (
+                    <span className="text-xs text-[#484f58]">
+                      {executionResult.executionTimeMs}ms
+                    </span>
+                  )}
+                </div>
+                {executionResult.results?.length > 0 && (
+                  <span className="text-xs text-[#8b949e]">
+                    {executionResult.results.filter((r) => r.passed).length}/
+                    {executionResult.results.length} passed
                   </span>
                 )}
               </div>
 
-              {/* Test case results */}
-              {executionResult.results &&
-                executionResult.results.length > 0 && (
-                  <div className="space-y-1 mb-2">
-                    {executionResult.results.map((r, i) => (
-                      <div key={i} className="flex items-center gap-2 text-xs">
-                        <span
-                          className={
-                            r.passed ? "text-[#3fb950]" : "text-[#f85149]"
-                          }
-                        >
-                          {r.passed ? "✅" : "❌"}
-                        </span>
-                        <span className="text-[#8b949e]">
-                          Test {i + 1}
-                          {r.input !== "hidden" && ` — Input: ${r.input}`}
-                        </span>
-                        {!r.passed && r.actualOutput !== "wrong" && (
-                          <span className="text-[#f85149]">
-                            Got: {r.actualOutput}
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-              {executionResult.stdout && (
-                <pre className="text-xs text-[#8b949e] font-mono whitespace-pre-wrap">
-                  {executionResult.stdout}
-                </pre>
-              )}
-              {executionResult.stderr && (
-                <pre className="text-xs text-[#f85149] font-mono whitespace-pre-wrap">
-                  {executionResult.stderr}
-                </pre>
+              {/* Test case tabs + details */}
+              {executionResult.results?.length > 0 ? (
+                <TestCaseResults results={executionResult.results} />
+              ) : (
+                /* Plain stdout/stderr — no test cases */
+                <div className="p-3 max-h-32 overflow-y-auto">
+                  {executionResult.stdout && (
+                    <pre className="text-xs text-[#8b949e] font-mono whitespace-pre-wrap">
+                      {executionResult.stdout}
+                    </pre>
+                  )}
+                  {executionResult.stderr && (
+                    <pre className="text-xs text-[#f85149] font-mono whitespace-pre-wrap">
+                      {executionResult.stderr}
+                    </pre>
+                  )}
+                </div>
               )}
             </div>
           )}
@@ -532,7 +647,12 @@ const InterviewRoom = () => {
       </div>
 
       {/* Room controls — bottom bar */}
-      <RoomControls roomId={roomId} code={currentCode} language={language} />
+      <RoomControls
+        roomId={roomId}
+        code={currentCode}
+        language={language}
+        question={question}
+      />
 
       {/* Score modal */}
       {showScoreModal && (

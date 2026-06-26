@@ -57,6 +57,9 @@ export const SOCKET_EVENTS = {
   EDITOR_LOAD_QUESTION: "editor:load_question",
   EDITOR_QUESTION_LOADED: "editor:question_loaded",
 
+  // Auth
+  AUTH_TOKEN_EXPIRED: 'auth:token_expired',
+
   // WebRTC
   WEBRTC_OFFER: "webrtc:offer",
   WEBRTC_ANSWER: "webrtc:answer",
