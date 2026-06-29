@@ -1,71 +1,80 @@
-import { create } from 'zustand';
+import { create } from "zustand";
 
 const useRoomStore = create((set) => ({
+  // ─── State ────────────────────────────────────────────────────────────────
+  roomId: null,
+  interviewId: null,
+  currentCode: "",
+  language: "JAVASCRIPT",
+  status: null,
+  participants: {},
+  question: null,
+  executionResult: null,
+  isExecuting: false,
+  isSubmitting: false,
+  isSaved: false,
 
-    // ─── State ────────────────────────────────────────────────────────────────
-    roomId: null,
-    interviewId: null,
-    currentCode: '',
-    language: 'JAVASCRIPT',
-    status: null,
-    participants: {},
-    question: null,
-    executionResult: null,
-    isExecuting: false,
-    isSaved: false,
-
-    // ─── Set room state from socket event ─────────────────────────────────────
-    setRoomState: (state) => set({
-        roomId: state.roomId,
-        currentCode: state.currentCode || '',
-        language: state.language || 'JAVASCRIPT',
-        status: state.status,
-        participants: state.participants || {},
+  // ─── Set room state from socket event ─────────────────────────────────────
+  setRoomState: (state) =>
+    set({
+      roomId: state.roomId,
+      currentCode: state.currentCode || "",
+      language: state.language || "JAVASCRIPT",
+      status: state.status,
+      participants: state.participants || {},
     }),
 
-    // ─── Code changes ─────────────────────────────────────────────────────────
-    setCode: (code) => set({ currentCode: code, isSaved: false }),
+  // ─── Code changes ─────────────────────────────────────────────────────────
+  setCode: (code) => set({ currentCode: code, isSaved: false }),
 
-    // ─── Language change ──────────────────────────────────────────────────────
-    setLanguage: (language) => set({ language }),
+  // ─── Language change ──────────────────────────────────────────────────────
+  setLanguage: (language) => set({ language }),
 
-    // ─── Question loaded ──────────────────────────────────────────────────────
-    setQuestion: (question) => set({
-        question,
+  // ─── Question loaded ──────────────────────────────────────────────────────
+  setQuestion: (question) =>
+    set({
+      question,
     }),
 
-    // ─── Participants ─────────────────────────────────────────────────────────
-    addParticipant: (userId, data) => set((state) => ({
-        participants: { ...state.participants, [userId]: data }
+  // ─── Participants ─────────────────────────────────────────────────────────
+  addParticipant: (userId, data) =>
+    set((state) => ({
+      participants: { ...state.participants, [userId]: data },
     })),
 
-    removeParticipant: (userId) => set((state) => {
-        const updated = { ...state.participants };
-        delete updated[userId];
-        return { participants: updated };
+  removeParticipant: (userId) =>
+    set((state) => {
+      const updated = { ...state.participants };
+      delete updated[userId];
+      return { participants: updated };
     }),
 
-    // ─── Execution ────────────────────────────────────────────────────────────
-    setExecuting: (isExecuting) => set({ isExecuting }),
-    setExecutionResult: (result) => set({ executionResult: result, isExecuting: false }),
+  // ─── Execution ────────────────────────────────────────────────────────────
+  setExecuting: (isExecuting) => set({ isExecuting }),
+  setSubmitting: (isSubmitting) => set({ isSubmitting }),
+  setExecutionResult: (result) =>
+    set({ executionResult: result, isExecuting: false }),
+  setSubmissionResult: (result) =>
+    set({ executionResult: result, isExecuting: false, isSubmitting: false }),
 
-    // ─── Save status ──────────────────────────────────────────────────────────
-    setSaved: (isSaved) => set({ isSaved }),
+  // ─── Save status ──────────────────────────────────────────────────────────
+  setSaved: (isSaved) => set({ isSaved }),
 
-    // ─── Reset room on leave ──────────────────────────────────────────────────
-    resetRoom: () => set({
-        roomId: null,
-        interviewId: null,
-        currentCode: '',
-        language: 'JAVASCRIPT',
-        status: null,
-        participants: {},
-        question: null,
-        executionResult: null,
-        isExecuting: false,
-        isSaved: false,
+  // ─── Reset room on leave ──────────────────────────────────────────────────
+  resetRoom: () =>
+    set({
+      roomId: null,
+      interviewId: null,
+      currentCode: "",
+      language: "JAVASCRIPT",
+      status: null,
+      participants: {},
+      question: null,
+      executionResult: null,
+      isExecuting: false,
+      isSubmitting: false,
+      isSaved: false,
     }),
-
 }));
 
 export default useRoomStore;

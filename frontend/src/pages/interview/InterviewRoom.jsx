@@ -36,6 +36,191 @@ const STARTER_TEMPLATES = {
   CPP: `#include <iostream>\n#include <string>\nusing namespace std;\n\nint main() {\n    string input;\n    getline(cin, input);\n    \n    // Write your solution here\n    cout << input << endl;\n    return 0;\n}\n`,
 };
 
+// ─── Output panel — Terminal + Test Cases tabs ────────────────────────────────
+const OutputPanel = ({ executionResult, isExecuting }) => {
+  const [activeTab, setActiveTab] = useState("testcases");
+
+  const hasTestCases = executionResult?.results?.length > 0;
+  const hasOutput = executionResult?.stdout || executionResult?.stderr;
+
+  // Auto switch to terminal when there's an error
+  useEffect(() => {
+    if (executionResult?.stderr && !executionResult?.passed) {
+      setActiveTab("terminal");
+    }
+  }, [executionResult]);
+  return (
+    <div
+      className="bg-[#161b22] border-t border-[#30363d] shrink-0 flex flex-col"
+      style={{ height: "220px" }}
+    >
+      {/* Tab bar + status */}
+      <div className="flex items-center justify-between px-3 border-b border-[#30363d] shrink-0">
+        {/* Tabs */}
+        <div className="flex items-center">
+          <button
+            onClick={() => setActiveTab("testcases")}
+            className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
+              activeTab === "testcases"
+                ? "border-[#238636] text-white"
+                : "border-transparent text-[#8b949e] hover:text-white"
+            }`}
+          >
+            Test Cases
+            {hasTestCases && (
+              <span
+                className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs ${
+                  executionResult.passed
+                    ? "bg-[#1a2f1a] text-[#3fb950]"
+                    : "bg-[#2d1318] text-[#f85149]"
+                }`}
+              >
+                {executionResult.results.filter((r) => r.passed).length}/
+                {executionResult.results.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab("terminal")}
+            className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
+              activeTab === "terminal"
+                ? "border-[#238636] text-white"
+                : "border-transparent text-[#8b949e] hover:text-white"
+            }`}
+          >
+            Terminal
+            {executionResult?.stderr && (
+              <span className="ml-1.5 w-1.5 h-1.5 bg-[#f85149] rounded-full inline-block" />
+            )}
+          </button>
+        </div>
+
+        {/* Status badge */}
+        {/* Status badge */}
+        {executionResult && (
+          <div className="flex items-center gap-2">
+            {/* Run vs Submit badge */}
+            {executionResult.isSubmission ? (
+              <span className="text-xs bg-[#1f2d3d] text-[#58a6ff] px-2 py-0.5 rounded-full border border-[#1f6feb]">
+                Submission
+              </span>
+            ) : (
+              <span className="text-xs bg-[#21262d] text-[#8b949e] px-2 py-0.5 rounded-full border border-[#30363d]">
+                Run
+              </span>
+            )}
+            <span
+              className={`text-xs font-semibold ${
+                executionResult.timedOut
+                  ? "text-[#d29922]"
+                  : executionResult.passed
+                    ? "text-[#3fb950]"
+                    : "text-[#f85149]"
+              }`}
+            >
+              {executionResult.timedOut
+                ? "⏱ TLE"
+                : executionResult.passed
+                  ? "✅ Accepted"
+                  : "❌ Wrong Answer"}
+            </span>
+            {executionResult.executionTimeMs && (
+              <span className="text-xs text-[#484f58]">
+                {executionResult.executionTimeMs}ms
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Tab content */}
+      <div className="flex-1 overflow-hidden">
+        {/* Executing spinner */}
+        {isExecuting ? (
+          <div className="h-full flex items-center justify-center gap-2">
+            <svg
+              className="animate-spin h-4 w-4 text-[#238636]"
+              viewBox="0 0 24 24"
+              fill="none"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8v8z"
+              />
+            </svg>
+            <span className="text-xs text-[#8b949e]">Running code...</span>
+          </div>
+        ) : activeTab === "testcases" ? (
+          /* ── Test Cases tab ── */
+          hasTestCases ? (
+            <TestCaseResults results={executionResult.results} />
+          ) : (
+            <div className="h-full flex items-center justify-center">
+              <p className="text-xs text-[#484f58]">
+                {executionResult
+                  ? "No test cases for this run"
+                  : "Run your code to see results"}
+              </p>
+            </div>
+          )
+        ) : (
+          /* ── Terminal tab ── */
+          <div className="h-full overflow-y-auto bg-[#0d1117] p-3 font-mono">
+            {/* Terminal header */}
+            <div className="flex items-center gap-2 mb-2 pb-2 border-b border-[#21262d]">
+              <div className="flex gap-1">
+                <div className="w-2.5 h-2.5 rounded-full bg-[#f85149]" />
+                <div className="w-2.5 h-2.5 rounded-full bg-[#d29922]" />
+                <div className="w-2.5 h-2.5 rounded-full bg-[#3fb950]" />
+              </div>
+              <span className="text-xs text-[#484f58]">stdout / stderr</span>
+            </div>
+
+            {/* Output */}
+            {!executionResult?.stdout && !executionResult?.stderr ? (
+              <p className="text-xs text-[#484f58]">~ no output</p>
+            ) : (
+              <>
+                {/* Summary line */}
+                {executionResult?.summary && (
+                  <div className="text-xs text-[#8b949e] mb-2 pb-2 border-b border-[#21262d]">
+                    {executionResult.summary}
+                  </div>
+                )}
+
+                {/* Actual program stdout — System.out.println etc */}
+                {executionResult?.stdout && (
+                  <pre className="text-xs text-[#c9d1d9] whitespace-pre-wrap leading-relaxed">
+                    {executionResult.stdout}
+                  </pre>
+                )}
+                {executionResult?.stderr && (
+                  <>
+                    {executionResult?.stdout && (
+                      <div className="border-t border-[#21262d] my-2" />
+                    )}
+                    <pre className="text-xs text-[#f85149] whitespace-pre-wrap leading-relaxed">
+                      {executionResult.stderr}
+                    </pre>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 // ─── Test case results — LeetCode style ──────────────────────────────────────
 const TestCaseResults = ({ results }) => {
   const [activeTab, setActiveTab] = useState(0);
@@ -126,12 +311,14 @@ const InterviewRoom = () => {
     question,
     executionResult,
     isExecuting,
+    isSubmitting,
     setRoomState,
     setCode,
     setLanguage,
     setQuestion,
     setExecuting,
     setExecutionResult,
+    setSubmissionResult,
     addParticipant,
     removeParticipant,
     resetRoom,
@@ -171,7 +358,9 @@ const InterviewRoom = () => {
         if (!interviewId) setInterviewId(interview.id);
         const isLead = interview.createdById === user.id;
         setIsLeadInterviewer(isLead);
-        console.log(`👑 isLeadInterviewer: ${isLead} (createdById=${interview.createdById}, userId=${user.id})`);
+        console.log(
+          `👑 isLeadInterviewer: ${isLead} (createdById=${interview.createdById}, userId=${user.id})`,
+        );
       } catch (err) {
         console.error("fetchLeadStatus failed:", err.message);
       }
@@ -212,6 +401,7 @@ const InterviewRoom = () => {
       socket.off(SOCKET_EVENTS.EDITOR_QUESTION_LOADED);
       socket.off(SOCKET_EVENTS.EDITOR_EXECUTION_STARTED);
       socket.off(SOCKET_EVENTS.EDITOR_EXECUTION_RESULT);
+      socket.off(SOCKET_EVENTS.EDITOR_SUBMISSION_RESULT);
       socket.off(SOCKET_EVENTS.EDITOR_SAVED);
       socket.off(SOCKET_EVENTS.AUTH_TOKEN_EXPIRED);
 
@@ -308,6 +498,9 @@ const InterviewRoom = () => {
         setExecutionResult(data);
       });
 
+      socket.on(SOCKET_EVENTS.EDITOR_SUBMISSION_RESULT, (data) => {
+        setSubmissionResult({ ...data, isSubmission: true });
+      });
       socket.on(SOCKET_EVENTS.EDITOR_SAVED, () => {
         console.log("✅ Auto saved");
       });
@@ -371,6 +564,7 @@ const InterviewRoom = () => {
         s.off(SOCKET_EVENTS.EDITOR_QUESTION_LOADED);
         s.off(SOCKET_EVENTS.EDITOR_EXECUTION_STARTED);
         s.off(SOCKET_EVENTS.EDITOR_EXECUTION_RESULT);
+        s.off(SOCKET_EVENTS.EDITOR_SUBMISSION_RESULT);
         s.off(SOCKET_EVENTS.EDITOR_SAVED);
         s.off(SOCKET_EVENTS.AUTH_TOKEN_EXPIRED);
       }
@@ -575,87 +769,12 @@ const InterviewRoom = () => {
 
           {/* Execution result */}
 
-          {executionResult && (
-            <div className="bg-[#161b22] border-t border-[#30363d] shrink-0">
-              {/* Status bar */}
-              <div className="flex items-center justify-between px-4 py-2 border-b border-[#30363d]">
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`text-xs font-semibold ${
-                      executionResult.timedOut
-                        ? "text-[#d29922]"
-                        : executionResult.passed
-                          ? "text-[#3fb950]"
-                          : "text-[#f85149]"
-                    }`}
-                  >
-                    {executionResult.timedOut
-                      ? "⏱ Time Limit Exceeded"
-                      : executionResult.passed
-                        ? "✅ Accepted"
-                        : "❌ Wrong Answer"}
-                  </span>
-                  {executionResult.executionTimeMs && (
-                    <span className="text-xs text-[#484f58]">
-                      {executionResult.executionTimeMs}ms
-                    </span>
-                  )}
-                </div>
-                {executionResult.results?.length > 0 && (
-                  <span className="text-xs text-[#8b949e]">
-                    {executionResult.results.filter((r) => r.passed).length}/
-                    {executionResult.results.length} passed
-                  </span>
-                )}
-              </div>
-
-              {/* Test case tabs + details */}
-              {executionResult.results?.length > 0 ? (
-                <TestCaseResults results={executionResult.results} />
-              ) : (
-                /* Plain stdout/stderr — no test cases */
-                <div className="p-3 max-h-32 overflow-y-auto">
-                  {executionResult.stdout && (
-                    <pre className="text-xs text-[#8b949e] font-mono whitespace-pre-wrap">
-                      {executionResult.stdout}
-                    </pre>
-                  )}
-                  {executionResult.stderr && (
-                    <pre className="text-xs text-[#f85149] font-mono whitespace-pre-wrap">
-                      {executionResult.stderr}
-                    </pre>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Executing indicator */}
-          {isExecuting && (
-            <div className="bg-[#161b22] border-t border-[#30363d] p-3 shrink-0">
-              <div className="flex items-center gap-2">
-                <svg
-                  className="animate-spin h-3 w-3 text-[#238636]"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8v8z"
-                  />
-                </svg>
-                <span className="text-xs text-[#8b949e]">Running code...</span>
-              </div>
-            </div>
+          {/* ── Output panel — Terminal + Test Cases ─────────────────────────── */}
+          {(executionResult || isExecuting) && (
+            <OutputPanel
+              executionResult={executionResult}
+              isExecuting={isExecuting}
+            />
           )}
         </div>
 

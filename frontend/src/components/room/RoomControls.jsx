@@ -3,32 +3,50 @@ import toast from "react-hot-toast";
 import useAuthStore from "../../store/authStore.js";
 import useRoomStore from "../../store/roomStore.js";
 import { questionAPI } from "../../services/api.js";
-import { runCode, loadQuestion } from "../../services/socket.js";
-import { SOCKET_EVENTS } from "../../utils/constants.js";
+import { runCode, loadQuestion, submitCode } from "../../services/socket.js";
 
 const RoomControls = ({ roomId, code, language, question }) => {
   const { isInterviewer } = useAuthStore();
-  const { isExecuting, isSaved } = useRoomStore();
+  const { isExecuting, isSubmitting, isSaved } = useRoomStore();
 
   const [showQuestionPicker, setShowQuestionPicker] = useState(false);
   const [questions, setQuestions] = useState([]);
   const [loadingQuestions, setLoadingQuestions] = useState(false);
 
-  // ─── Run code ─────────────────────────────────────────────────────────────
+  // ─── Run code — visible test cases only ──────────────────────────────────
   const handleRunCode = () => {
     if (!code.trim()) {
       toast.error("Nothing to run");
       return;
     }
-    runCode(roomId, code, language, question?.questionId || null);
-    toast("Running code...", { icon: "⚡" });
+    if (!question?.questionId) {
+      toast.error("Load a question first");
+      return;
+    }
+    runCode(roomId, code, language, question.questionId);
+    toast("Running visible test cases...", { icon: "⚡" });
+  };
+
+  // ─── Submit — all test cases including hidden ─────────────────────────────
+  const handleSubmit = () => {
+    if (!code.trim()) {
+      toast.error("Nothing to submit");
+      return;
+    }
+    if (!question?.questionId) {
+      toast.error("Load a question first");
+      return;
+    }
+    const { setSubmitting } = useRoomStore.getState();
+    setSubmitting(true);
+    submitCode(roomId, code, language, question.questionId);
+    toast("Submitting — running all test cases...", { icon: "📤" });
   };
 
   // ─── Load question picker ─────────────────────────────────────────────────
   const handleOpenQuestionPicker = async () => {
     setShowQuestionPicker(true);
     if (questions.length > 0) return;
-
     try {
       setLoadingQuestions(true);
       const response = await questionAPI.getAll();
@@ -40,13 +58,15 @@ const RoomControls = ({ roomId, code, language, question }) => {
     }
   };
 
-  // ─── Select question ──────────────────────────────────────────────────────
   const handleSelectQuestion = (questionId) => {
     const { language } = useRoomStore.getState();
     loadQuestion(roomId, questionId, language);
     setShowQuestionPicker(false);
     toast.success("Loading question...");
   };
+
+  // Reset submitting state when result comes back
+  // (handled in InterviewRoom via socket event)
 
   return (
     <>
@@ -63,7 +83,6 @@ const RoomControls = ({ roomId, code, language, question }) => {
                 ✕
               </button>
             </div>
-
             <div className="p-4 max-h-96 overflow-y-auto">
               {loadingQuestions ? (
                 <div className="flex justify-center py-8">
@@ -126,7 +145,6 @@ const RoomControls = ({ roomId, code, language, question }) => {
       {/* Bottom controls bar */}
       <div className="bg-[#161b22] border-t border-[#30363d] px-4 py-2 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
-          {/* Save indicator */}
           <span className="text-xs text-[#484f58]">
             {isSaved ? "✓ Saved" : "Auto-saves every 10s"}
           </span>
@@ -143,13 +161,13 @@ const RoomControls = ({ roomId, code, language, question }) => {
             </button>
           )}
 
-          {/* Run code */}
+          {/* Run — visible test cases only */}
           <button
             onClick={handleRunCode}
-            disabled={isExecuting}
-            className="text-xs bg-[#238636] hover:bg-[#2ea043] disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-1.5 rounded-lg transition-colors font-medium flex items-center gap-1.5"
+            disabled={isExecuting || isSubmitting}
+            className="text-xs bg-[#21262d] hover:bg-[#30363d] disabled:opacity-50 disabled:cursor-not-allowed text-[#8b949e] hover:text-white border border-[#30363d] px-4 py-1.5 rounded-lg transition-colors font-medium flex items-center gap-1.5"
           >
-            {isExecuting ? (
+            {isExecuting && !isSubmitting ? (
               <>
                 <svg
                   className="animate-spin h-3 w-3"
@@ -174,6 +192,40 @@ const RoomControls = ({ roomId, code, language, question }) => {
               </>
             ) : (
               <>▶ Run</>
+            )}
+          </button>
+
+          {/* Submit — all test cases */}
+          <button
+            onClick={handleSubmit}
+            disabled={isExecuting || isSubmitting}
+            className="text-xs bg-[#238636] hover:bg-[#2ea043] disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-1.5 rounded-lg transition-colors font-medium flex items-center gap-1.5"
+          >
+            {isSubmitting ? (
+              <>
+                <svg
+                  className="animate-spin h-3 w-3"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8v8z"
+                  />
+                </svg>
+                Submitting...
+              </>
+            ) : (
+              <>📤 Submit</>
             )}
           </button>
         </div>

@@ -91,7 +91,14 @@ export const runCode = (roomId, code, language, questionId) => {
     questionId,
   });
 };
-
+export const submitCode = (roomId, code, language, questionId) => {
+  socket?.emit(SOCKET_EVENTS.EDITOR_SUBMIT_CODE, {
+    roomId,
+    code,
+    language,
+    questionId,
+  });
+};
 export const autoSave = (roomId, code, language) => {
   socket?.emit(SOCKET_EVENTS.EDITOR_AUTO_SAVE, { roomId, code, language });
 };

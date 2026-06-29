@@ -56,9 +56,11 @@ export const SOCKET_EVENTS = {
   EDITOR_SAVED: "editor:saved",
   EDITOR_LOAD_QUESTION: "editor:load_question",
   EDITOR_QUESTION_LOADED: "editor:question_loaded",
+  EDITOR_SUBMIT_CODE: "editor:submit_code",
+  EDITOR_SUBMISSION_RESULT: "editor:submission_result",
 
   // Auth
-  AUTH_TOKEN_EXPIRED: 'auth:token_expired',
+  AUTH_TOKEN_EXPIRED: "auth:token_expired",
 
   // WebRTC
   WEBRTC_OFFER: "webrtc:offer",
@@ -68,7 +70,7 @@ export const SOCKET_EVENTS = {
   WEBRTC_CALL_STARTED: "webrtc:call_started",
   WEBRTC_USER_STARTED_CALL: "webrtc:user_started_call",
   WEBRTC_START_CALL: "webrtc:start_call",
-  WEBRTC_PEER_IN_ROOM: 'webrtc:peer_in_room',
+  WEBRTC_PEER_IN_ROOM: "webrtc:peer_in_room",
 };
 
 export const STUN_SERVERS = {
