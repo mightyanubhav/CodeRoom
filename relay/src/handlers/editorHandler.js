@@ -268,10 +268,11 @@ export const editorHandler = (io, socket) => {
           tags: questionResponse.data.tags,
         };
 
-        // Update Redis
+        // Update Redis — store full question so rejoining users can restore it
         if (roomState) {
           roomState.currentCode = starterCode;
           roomState.questionId = questionId;
+          roomState.question = questionData;
           await setRoomState(roomId, roomState);
         }
 

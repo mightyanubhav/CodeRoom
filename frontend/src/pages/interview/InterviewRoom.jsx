@@ -468,6 +468,12 @@ const InterviewRoom = () => {
         if (state.startedAt) setInterviewStartedAt(state.startedAt);
         else setInterviewStartedAt(new Date().toISOString());
 
+        // Restore question after page refresh — relay persists full question in Redis
+        if (state.question) {
+          setQuestion(state.question);
+          starterCodeMapRef.current = state.question.starterCodeMap || null;
+        }
+
         const { user } = useAuthStore.getState();
 
         if (user?.role === "CANDIDATE") {
@@ -503,8 +509,11 @@ const InterviewRoom = () => {
 
       socket.on(SOCKET_EVENTS.ROOM_USER_JOINED, (data) => {
         addParticipant(data.userId, data);
-        setParticipants((prev) => [...prev, data]);
-        toast.success(`${data.email} joined`);
+        setParticipants((prev) => {
+          if (prev.find((p) => p.userId === data.userId)) return prev;
+          return [...prev, data];
+        });
+        if (!data.isExisting) toast.success(`${data.email} joined`);
       });
 
       socket.on(SOCKET_EVENTS.ROOM_USER_LEFT, (data) => {
@@ -540,12 +549,21 @@ const InterviewRoom = () => {
       });
 
       socket.on(SOCKET_EVENTS.EDITOR_QUESTION_LOADED, (data) => {
+        // Guard against duplicate firings from the Pub/Sub relay
+        // (each participant adds a subscriber, so N participants → N+1 emits)
+        const existing = useRoomStore.getState().question;
+        const isNewQuestion =
+          !existing || existing.questionId !== data.questionId;
+
         setQuestion(data);
         starterCodeMapRef.current = data.starterCodeMap || null;
-        setIsRemoteChange(true);
-        setCode(data.starterCode || "");
-        setTimeout(() => setIsRemoteChange(false), 100);
-        toast.success(`Question loaded: ${data.questionTitle}`);
+
+        if (isNewQuestion) {
+          setIsRemoteChange(true);
+          setCode(data.starterCode || "");
+          setTimeout(() => setIsRemoteChange(false), 100);
+          toast.success(`Question loaded: ${data.questionTitle}`);
+        }
       });
 
       socket.on(SOCKET_EVENTS.EDITOR_EXECUTION_STARTED, () => {
@@ -643,18 +661,8 @@ const InterviewRoom = () => {
   const handleLanguageChange = (newLanguage) => {
     setLanguage(newLanguage);
     changeLanguage(roomId, newLanguage);
-
-    // Use question's per-language starter code if available, else generic template
-    const map = starterCodeMapRef.current;
-    const template = STARTER_TEMPLATES[newLanguage];
-    const code =
-      (map && (map[newLanguage] || map[Object.keys(map)[0]])) ||
-      (template ? template() : "");
-
-    setIsRemoteChange(true);
-    setCode(code);
-    sendCodeChange(roomId, code, null);
-    setTimeout(() => setIsRemoteChange(false), 100);
+    // Don't reset the editor content — the candidate's solution must be preserved
+    // across language switches. Syntax highlighting changes via the language prop.
   };
 
   const handleEndInterview = async () => {

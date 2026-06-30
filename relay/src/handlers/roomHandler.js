@@ -110,6 +110,26 @@ export const roomHandler = (io, socket) => {
       // 10. Send room state to joining user
       socket.emit("room:state", roomState);
 
+      // 10b. Notify joining user about pre-existing participants so their
+      //      VideoPanel can render role labels immediately (no ROOM_USER_JOINED
+      //      fires for users who were already in the room).
+      const roomSockets = io.sockets.adapter.rooms.get(roomId);
+      if (roomSockets) {
+        roomSockets.forEach((socketId) => {
+          if (socketId !== socket.id) {
+            const existingSocket = io.sockets.sockets.get(socketId);
+            if (existingSocket) {
+              socket.emit("room:user_joined", {
+                userId: existingSocket.userId,
+                email: existingSocket.userEmail,
+                role: existingSocket.userRole,
+                isExisting: true,
+              });
+            }
+          }
+        });
+      }
+
       // 11. Notify everyone else only if new participant
       if (!alreadyInRoom) {
         socket.to(roomId).emit("room:user_joined", {
