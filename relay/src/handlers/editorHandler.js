@@ -232,9 +232,31 @@ export const editorHandler = (io, socket) => {
 
         console.log(`🌐 Loading question in language: ${currentLanguage}`);
 
-        // Always use current language template
-        const template = STARTER_TEMPLATES[currentLanguage];
-        const starterCode = template ? template() : "";
+        // Resolve starter code: stored as JSON map {LANG: code} or plain string
+        let starterCode = "";
+        let starterCodeMap = null; // full map sent to frontend for language switching
+        const rawCode = questionResponse.data.starterCode;
+        if (rawCode) {
+          try {
+            const codeMap = JSON.parse(rawCode);
+            if (typeof codeMap === "object" && !Array.isArray(codeMap)) {
+              starterCodeMap = codeMap;
+              starterCode =
+                codeMap[currentLanguage] ||
+                codeMap[Object.keys(codeMap)[0]] ||
+                "";
+            } else {
+              starterCode = rawCode;
+            }
+          } catch {
+            starterCode = rawCode;
+          }
+        }
+        // Final fallback: generic language template
+        if (!starterCode) {
+          const template = STARTER_TEMPLATES[currentLanguage];
+          starterCode = template ? template() : "";
+        }
 
         const questionData = {
           questionId: questionResponse.data.id,
@@ -242,6 +264,7 @@ export const editorHandler = (io, socket) => {
           description: questionResponse.data.description,
           difficulty: questionResponse.data.difficulty,
           starterCode,
+          starterCodeMap, // per-language map so client can switch languages
           tags: questionResponse.data.tags,
         };
 

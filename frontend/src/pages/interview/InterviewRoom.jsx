@@ -5,6 +5,8 @@ import toast from "react-hot-toast";
 import useAuthStore from "../../store/authStore.js";
 import useRoomStore from "../../store/roomStore.js";
 import { roomAPI, interviewAPI } from "../../services/api.js";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   initSocket,
   getSocket,
@@ -36,6 +38,55 @@ const STARTER_TEMPLATES = {
   CPP: `#include <iostream>\n#include <string>\nusing namespace std;\n\nint main() {\n    string input;\n    getline(cin, input);\n    \n    // Write your solution here\n    cout << input << endl;\n    return 0;\n}\n`,
 };
 
+// ─── Interview Timer ──────────────────────────────────────────────────────────
+const InterviewTimer = ({ startedAt }) => {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const start = startedAt ? new Date(startedAt).getTime() : Date.now();
+
+    const tick = () => {
+      setElapsed(Math.floor((Date.now() - start) / 1000));
+    };
+
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [startedAt]);
+
+  const hrs = Math.floor(elapsed / 3600);
+  const mins = Math.floor((elapsed % 3600) / 60);
+  const secs = elapsed % 60;
+
+  const format = (n) => String(n).padStart(2, "0");
+
+  const color =
+    elapsed > 3600
+      ? "text-[#f85149]" // > 1 hour → red
+      : elapsed > 2700
+        ? "text-[#d29922]" // > 45 min → yellow
+        : "text-[#3fb950]"; // normal → green
+
+  return (
+    <div className={`flex items-center gap-1 font-mono text-xs ${color}`}>
+      <svg
+        className="w-3 h-3"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+        />
+      </svg>
+      {hrs > 0 && `${format(hrs)}:`}
+      {format(mins)}:{format(secs)}
+    </div>
+  );
+};
 // ─── Output panel — Terminal + Test Cases tabs ────────────────────────────────
 const OutputPanel = ({ executionResult, isExecuting }) => {
   const [activeTab, setActiveTab] = useState("testcases");
@@ -329,6 +380,7 @@ const InterviewRoom = () => {
   const [participants, setParticipants] = useState([]);
   const [showQuestion, setShowQuestion] = useState(true);
   const [showVideo, setShowVideo] = useState(true);
+  const starterCodeMapRef = useRef(null); // per-language starter codes from the loaded question
   const autoSaveRef = useRef(null);
   const codeRef = useRef(currentCode);
   const debounceRef = useRef(null);
@@ -337,6 +389,8 @@ const InterviewRoom = () => {
   const [interviewId, setInterviewId] = useState(null);
   const [isLeadInterviewer, setIsLeadInterviewer] = useState(false);
   const showScoreModalRef = useRef(false);
+
+  const [interviewStartedAt, setInterviewStartedAt] = useState(null);
 
   const socketRef = useRef(null);
 
@@ -411,6 +465,9 @@ const InterviewRoom = () => {
         setIsConnected(true);
         toast.success("Connected to room");
 
+        if (state.startedAt) setInterviewStartedAt(state.startedAt);
+        else setInterviewStartedAt(new Date().toISOString());
+
         const { user } = useAuthStore.getState();
 
         if (user?.role === "CANDIDATE") {
@@ -484,6 +541,7 @@ const InterviewRoom = () => {
 
       socket.on(SOCKET_EVENTS.EDITOR_QUESTION_LOADED, (data) => {
         setQuestion(data);
+        starterCodeMapRef.current = data.starterCodeMap || null;
         setIsRemoteChange(true);
         setCode(data.starterCode || "");
         setTimeout(() => setIsRemoteChange(false), 100);
@@ -586,15 +644,17 @@ const InterviewRoom = () => {
     setLanguage(newLanguage);
     changeLanguage(roomId, newLanguage);
 
-    // Always update starter code when language changes
-    // regardless of what's currently in the editor
+    // Use question's per-language starter code if available, else generic template
+    const map = starterCodeMapRef.current;
     const template = STARTER_TEMPLATES[newLanguage];
-    if (template) {
-      setIsRemoteChange(true);
-      setCode(template);
-      sendCodeChange(roomId, template, null);
-      setTimeout(() => setIsRemoteChange(false), 100);
-    }
+    const code =
+      (map && (map[newLanguage] || map[Object.keys(map)[0]])) ||
+      (template ? template() : "");
+
+    setIsRemoteChange(true);
+    setCode(code);
+    sendCodeChange(roomId, code, null);
+    setTimeout(() => setIsRemoteChange(false), 100);
   };
 
   const handleEndInterview = async () => {
@@ -664,6 +724,7 @@ const InterviewRoom = () => {
             <span className="text-xs text-[#8b949e]">Live</span>
           </div>
           {/* Participants */}
+          {/* Participants */}
           <div className="flex items-center gap-1">
             {participants.map((p) => (
               <span
@@ -674,6 +735,13 @@ const InterviewRoom = () => {
               </span>
             ))}
           </div>
+
+          {/* Timer */}
+          {interviewStartedAt && (
+            <div className="flex items-center gap-1.5 bg-[#21262d] px-2 py-1 rounded-lg border border-[#30363d]">
+              <InterviewTimer startedAt={interviewStartedAt} />
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -731,13 +799,14 @@ const InterviewRoom = () => {
         {/* Question panel */}
         {showQuestion && question && (
           <div className="w-80 bg-[#161b22] border-r border-[#30363d] flex flex-col overflow-hidden shrink-0">
-            <div className="p-4 border-b border-[#30363d]">
-              <div className="flex items-center justify-between mb-1">
-                <h3 className="text-white font-semibold text-sm">
+            {/* Header */}
+            <div className="p-4 border-b border-[#30363d] shrink-0">
+              <div className="flex items-start justify-between gap-2">
+                <h3 className="text-white font-semibold text-sm leading-tight">
                   {question.questionTitle}
                 </h3>
                 <span
-                  className={`text-xs px-2 py-0.5 rounded-full ${
+                  className={`text-xs px-2 py-0.5 rounded-full shrink-0 font-medium ${
                     question.difficulty === "EASY"
                       ? "text-[#3fb950] bg-[#1a2f1a]"
                       : question.difficulty === "MEDIUM"
@@ -748,11 +817,122 @@ const InterviewRoom = () => {
                   {question.difficulty}
                 </span>
               </div>
+              {question.tags && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {question.tags.split(",").map((tag) => (
+                    <span
+                      key={tag}
+                      className="text-xs bg-[#21262d] text-[#58a6ff] px-1.5 py-0.5 rounded"
+                    >
+                      {tag.trim()}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
+
+            {/* Description — markdown rendered */}
             <div className="flex-1 overflow-y-auto p-4">
-              <p className="text-[#8b949e] text-sm leading-relaxed">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  p: ({ children }) => (
+                    <p className="text-[#8b949e] text-sm leading-relaxed mb-3">
+                      {children}
+                    </p>
+                  ),
+                  strong: ({ children }) => (
+                    <strong className="text-white font-semibold">
+                      {children}
+                    </strong>
+                  ),
+                  em: ({ children }) => (
+                    <em className="text-[#8b949e] italic">{children}</em>
+                  ),
+                  code: ({ inline, children }) =>
+                    inline ? (
+                      <code className="bg-[#21262d] text-[#58a6ff] px-1.5 py-0.5 rounded text-xs font-mono">
+                        {children}
+                      </code>
+                    ) : (
+                      <pre className="bg-[#0d1117] border border-[#30363d] rounded-lg p-3 my-3 overflow-x-auto">
+                        <code className="text-xs font-mono text-[#c9d1d9]">
+                          {children}
+                        </code>
+                      </pre>
+                    ),
+                  ul: ({ children }) => (
+                    <ul className="list-disc list-inside text-[#8b949e] text-sm space-y-1 mb-3 pl-2">
+                      {children}
+                    </ul>
+                  ),
+                  ol: ({ children }) => (
+                    <ol className="list-decimal list-inside text-[#8b949e] text-sm space-y-1 mb-3 pl-2">
+                      {children}
+                    </ol>
+                  ),
+                  li: ({ children }) => (
+                    <li className="text-[#8b949e] text-sm">{children}</li>
+                  ),
+                  h1: ({ children }) => (
+                    <h1 className="text-white font-bold text-base mb-2">
+                      {children}
+                    </h1>
+                  ),
+                  h2: ({ children }) => (
+                    <h2 className="text-white font-semibold text-sm mb-2">
+                      {children}
+                    </h2>
+                  ),
+                  h3: ({ children }) => (
+                    <h3 className="text-[#8b949e] font-semibold text-sm mb-1">
+                      {children}
+                    </h3>
+                  ),
+                  blockquote: ({ children }) => (
+                    <blockquote className="border-l-2 border-[#238636] pl-3 my-3 text-[#8b949e] italic text-sm">
+                      {children}
+                    </blockquote>
+                  ),
+                  img: ({ src, alt }) => (
+                    <img
+                      src={src}
+                      alt={alt}
+                      className="rounded-lg max-w-full my-3 border border-[#30363d]"
+                    />
+                  ),
+                  table: ({ children }) => (
+                    <div className="overflow-x-auto my-3">
+                      <table className="w-full text-xs border-collapse">
+                        {children}
+                      </table>
+                    </div>
+                  ),
+                  th: ({ children }) => (
+                    <th className="border border-[#30363d] bg-[#21262d] text-white px-3 py-1.5 text-left">
+                      {children}
+                    </th>
+                  ),
+                  td: ({ children }) => (
+                    <td className="border border-[#30363d] text-[#8b949e] px-3 py-1.5">
+                      {children}
+                    </td>
+                  ),
+                  hr: () => <hr className="border-[#30363d] my-4" />,
+                  a: ({ href, children }) => (
+                    <a
+                      href={href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[#58a6ff] hover:underline"
+                    >
+                      {children}
+                    </a>
+                  ),
+                }}
+              >
                 {question.description}
-              </p>
+              </ReactMarkdown>
             </div>
           </div>
         )}
