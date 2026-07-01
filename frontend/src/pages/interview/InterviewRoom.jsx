@@ -381,8 +381,10 @@ const InterviewRoom = () => {
   const [showQuestion, setShowQuestion] = useState(true);
   const [showVideo, setShowVideo] = useState(true);
   const starterCodeMapRef = useRef(null); // per-language starter codes from the loaded question
+  const codesPerLanguageRef = useRef({}); // per-language code retention across language switches
   const autoSaveRef = useRef(null);
   const codeRef = useRef(currentCode);
+  const languageRef = useRef(language);
   const debounceRef = useRef(null);
   const [showScoreModal, setShowScoreModal] = useState(false);
   const [interviewRoomId, setInterviewRoomId] = useState(null);
@@ -394,10 +396,14 @@ const InterviewRoom = () => {
 
   const socketRef = useRef(null);
 
-  // Keep codeRef in sync
+  // Keep refs in sync so the auto-save interval always reads the current values
+  // (the interval closure captures stale values if we use the state variables directly)
   useEffect(() => {
     codeRef.current = currentCode;
   }, [currentCode]);
+  useEffect(() => {
+    languageRef.current = language;
+  }, [language]);
 
   // Reliably determine lead-interviewer status once the room is connected.
   // This runs independently of the ROOM_STATE socket handler so a transient
@@ -467,6 +473,12 @@ const InterviewRoom = () => {
 
         if (state.startedAt) setInterviewStartedAt(state.startedAt);
         else setInterviewStartedAt(new Date().toISOString());
+
+        // Seed per-language code map with the persisted code so that after a
+        // refresh the user can switch away and back without losing their work.
+        if (state.language && state.currentCode) {
+          codesPerLanguageRef.current[state.language] = state.currentCode;
+        }
 
         // Restore question after page refresh — relay persists full question in Redis
         if (state.question) {
@@ -546,6 +558,11 @@ const InterviewRoom = () => {
 
       socket.on(SOCKET_EVENTS.ROOM_LANGUAGE_CHANGED, (data) => {
         setLanguage(data.language);
+        if (data.code !== undefined) {
+          setIsRemoteChange(true);
+          setCode(data.code);
+          setTimeout(() => setIsRemoteChange(false), 100);
+        }
       });
 
       socket.on(SOCKET_EVENTS.EDITOR_QUESTION_LOADED, (data) => {
@@ -559,6 +576,7 @@ const InterviewRoom = () => {
         starterCodeMapRef.current = data.starterCodeMap || null;
 
         if (isNewQuestion) {
+          codesPerLanguageRef.current = {};
           setIsRemoteChange(true);
           setCode(data.starterCode || "");
           setTimeout(() => setIsRemoteChange(false), 100);
@@ -617,7 +635,7 @@ const InterviewRoom = () => {
 
       // ── Auto save every 10 seconds ────────────────────────────────────────
       autoSaveRef.current = setInterval(() => {
-        autoSave(roomId, codeRef.current, language);
+        autoSave(roomId, codeRef.current, languageRef.current);
       }, 10000);
     };
 
@@ -659,16 +677,31 @@ const InterviewRoom = () => {
     [roomId],
   );
   const handleLanguageChange = (newLanguage) => {
-    setLanguage(newLanguage);
-    changeLanguage(roomId, newLanguage);
+    const previousLanguage = language;
 
-    const template =
-      starterCodeMapRef.current?.[newLanguage] ||
-      STARTER_TEMPLATES[newLanguage] ||
-      "";
+    // Always save the current code under the previous language so switching
+    // back restores exactly what the user had written.
+    codesPerLanguageRef.current[previousLanguage] = currentCode;
+
+    setLanguage(newLanguage);
+
+    // Restore previously written code for the target language if available,
+    // otherwise fall back to the question starter or generic template.
+    const savedCode = codesPerLanguageRef.current[newLanguage];
+    const newCode =
+      savedCode !== undefined
+        ? savedCode
+        : (starterCodeMapRef.current?.[newLanguage] ||
+           STARTER_TEMPLATES[newLanguage] ||
+           "");
+
+    // Send language + code in a single relay event to update Redis atomically
+    // (avoids a race where a concurrent editor:code_change read overwrites the
+    // new language back to the old value before it is saved).
+    changeLanguage(roomId, newLanguage, newCode);
+
     setIsRemoteChange(true);
-    setCode(template);
-    sendCodeChange(roomId, template, null);
+    setCode(newCode);
     setTimeout(() => setIsRemoteChange(false), 100);
   };
 

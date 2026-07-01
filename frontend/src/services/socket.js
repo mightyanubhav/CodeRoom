@@ -67,8 +67,10 @@ export const leaveRoom = (roomId) => {
   socket?.emit(SOCKET_EVENTS.ROOM_LEAVE, { roomId });
 };
 
-export const changeLanguage = (roomId, language) => {
-  socket?.emit(SOCKET_EVENTS.ROOM_LANGUAGE_CHANGE, { roomId, language });
+export const changeLanguage = (roomId, language, code) => {
+  const payload = { roomId, language };
+  if (code !== undefined) payload.code = code;
+  socket?.emit(SOCKET_EVENTS.ROOM_LANGUAGE_CHANGE, payload);
 };
 
 export const closeRoom = (roomId) => {

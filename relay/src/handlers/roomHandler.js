@@ -167,15 +167,32 @@ export const roomHandler = (io, socket) => {
     }
   });
 
-  socket.on("room:language_change", async ({ roomId, language }) => {
+  socket.on("room:language_change", async ({ roomId, language, code }) => {
     try {
       const roomState = await getRoomState(roomId);
       if (roomState) {
         roomState.language = language;
+        // Update code atomically with language to prevent race condition where
+        // a concurrent editor:code_change read overwrites the new language.
+        if (code !== undefined) {
+          roomState.currentCode = code;
+        }
         await setRoomState(roomId, roomState);
       }
-      io.to(roomId).emit("room:language_changed", { language });
-      await publishToRoom(roomId, "room:language_changed", { language });
+
+      // Persist immediately to Spring Boot/DB — don't wait for the next
+      // 10s auto-save cycle, otherwise a refresh right after switching
+      // languages loses the change and falls back to the DB default.
+      try {
+        const syncPayload = { language };
+        if (code !== undefined) syncPayload.currentCode = code;
+        await axios.post(`${SPRING_URL}/api/rooms/${roomId}/sync`, syncPayload);
+      } catch (syncErr) {
+        console.error("Language DB sync failed:", syncErr.message);
+      }
+
+      io.to(roomId).emit("room:language_changed", { language, code });
+      await publishToRoom(roomId, "room:language_changed", { language, code });
     } catch (err) {
       socket.emit("room:error", { message: "Failed to change language" });
     }
@@ -238,9 +255,16 @@ const handleLeaveRoom = async (io, socket, roomId) => {
 
     const remaining = await getParticipantCount(roomId);
     if (remaining === 0) {
-      await deleteRoomState(roomId);
-      await unsubscribeFromRoom(roomId);
-      console.log(`🗑️ Room ${roomId} cleaned up`);
+      // Grace period: a page refresh disconnects then immediately reconnects.
+      // Wait 20s before cleaning up so a quick refresh doesn't wipe language/code.
+      setTimeout(async () => {
+        const stillEmpty = await getParticipantCount(roomId);
+        if (stillEmpty === 0) {
+          await deleteRoomState(roomId);
+          await unsubscribeFromRoom(roomId);
+          console.log(`🗑️ Room ${roomId} cleaned up`);
+        }
+      }, 20000);
     }
 
     console.log(`👋 ${socket.userEmail} left room ${roomId}`);

@@ -5,6 +5,35 @@ import { getSocket } from "../../services/socket.js";
 import { recordingAPI } from "../../services/api.js";
 import toast from "react-hot-toast";
 
+// ─── Avatar helpers ────────────────────────────────────────────────────────────
+const AVATAR_COLORS = [
+  "#1f6feb","#238636","#da3633","#d29922",
+  "#8957e5","#0d419d","#2ea043","#bf4b8a",
+];
+const getAvatarColor = (str = "") => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+};
+const getInitials = (label = "") => {
+  const clean = label.replace(/[🎯👑⚡]/g, "").trim();
+  const parts = clean.split(/[\s@._-]+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  if (parts[0]?.length >= 2) return parts[0].slice(0, 2).toUpperCase();
+  return "??";
+};
+const AvatarFallback = ({ label }) => (
+  <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0d1117]">
+    <div
+      className="w-12 h-12 rounded-full flex items-center justify-center text-white text-lg font-bold mb-1 select-none"
+      style={{ backgroundColor: getAvatarColor(label) }}
+    >
+      {getInitials(label)}
+    </div>
+    <span className="text-xs text-[#484f58]">Camera off</span>
+  </div>
+);
+
 const ICE_SERVERS = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
@@ -40,6 +69,7 @@ const VideoPanel = ({
   const [isUploading, setIsUploading] = useState(false);
   const [remoteVideos, setRemoteVideos] = useState({});
   const [connectedCount, setConnectedCount] = useState(0);
+  const [remoteCameraOff, setRemoteCameraOff] = useState({}); // { userId: boolean }
 
   useEffect(() => {
     userRef.current = user;
@@ -110,6 +140,11 @@ const VideoPanel = ({
       setConnectedCount(Object.keys(next).length);
       return next;
     });
+    setRemoteCameraOff((prev) => {
+      const next = { ...prev };
+      delete next[userId];
+      return next;
+    });
   }, []);
 
   // ─── Create peer connection ───────────────────────────────────────────────
@@ -139,6 +174,14 @@ const VideoPanel = ({
         videoElem.playsInline = true;
         videoElem.muted = true;
         remoteVideoElemsRef.current[targetUserId] = videoElem;
+
+        // Detect camera on/off for the avatar fallback
+        if (event.track.kind === "video") {
+          event.track.onmute = () =>
+            setRemoteCameraOff((prev) => ({ ...prev, [targetUserId]: true }));
+          event.track.onunmute = () =>
+            setRemoteCameraOff((prev) => ({ ...prev, [targetUserId]: false }));
+        }
 
         setRemoteVideos((prev) => {
           const next = { ...prev, [targetUserId]: stream };
@@ -335,14 +378,6 @@ const VideoPanel = ({
     };
 
     setup();
-    console.log("VIDEO DEBUG:", {
-      remoteVideoCount: remoteVideoEntries.length,
-      remoteUserIds: remoteVideoEntries.map(([id]) => id),
-      participantCount: participants.length,
-      participantIds: participants.map((p) => p.userId),
-      candidateFound: !!candidateEntry,
-      interviewerCount: interviewerEntries.length,
-    });
     return () => {
       const socket = getSocket();
       if (socket) {
@@ -614,20 +649,10 @@ const VideoPanel = ({
     };
   }, []);
 
-  // ─── Separate candidate from interviewers ─────────────────────────────────
   const remoteVideoEntries = Object.entries(remoteVideos);
-
-  const candidateEntry = remoteVideoEntries.find(([userId]) => {
-    const p = participants.find((p) => p.userId === userId);
-    return p?.role === "CANDIDATE";
-  });
-
-  const interviewerEntries = remoteVideoEntries.filter(([userId]) => {
-    const p = participants.find((p) => p.userId === userId);
-    return p?.role !== "CANDIDATE";
-  });
-
-  const hasRoleInfo = participants.length > 0;
+  // total = all remotes + local; drives grid column count
+  const totalVideos = remoteVideoEntries.length + 1;
+  const gridCols = totalVideos >= 3 ? "grid-cols-2" : "grid-cols-1";
 
   return (
     <div className="h-full flex flex-col bg-[#161b22]">
@@ -666,92 +691,66 @@ const VideoPanel = ({
         </div>
       </div>
 
-      {/* Videos */}
-      <div className="flex-1 flex flex-col gap-2 p-2 overflow-y-auto">
-        {remoteVideoEntries.length > 0 ? (
-          <>
-            {/* Candidate — larger tile (4:3) so they dominate the panel */}
-            {hasRoleInfo && candidateEntry && (
-              <div className="relative rounded-lg overflow-hidden bg-[#0d1117]">
-                <RemoteVideo
-                  stream={candidateEntry[1]}
-                  aspectClass="aspect-[4/3]"
-                />
-                <span className="absolute bottom-1 left-2 text-xs text-white bg-black/60 px-1.5 py-0.5 rounded">
-                  🎯 Candidate
-                </span>
-              </div>
-            )}
-
-            {/* Interviewers — smaller thumbnails (16:9) in a grid */}
-            {hasRoleInfo && interviewerEntries.length > 0 && (
-              <div
-                className={`grid gap-1.5 ${
-                  interviewerEntries.length === 1
-                    ? "grid-cols-1"
-                    : "grid-cols-2"
-                }`}
-              >
-                {interviewerEntries.map(([userId, stream]) => {
-                  const p = participants.find((p) => p.userId === userId);
-                  return (
-                    <div
-                      key={userId}
-                      className="relative rounded-lg overflow-hidden bg-[#0d1117]"
-                    >
-                      <RemoteVideo stream={stream} aspectClass="aspect-video" />
-                      <span className="absolute bottom-1 left-2 text-xs text-white bg-black/60 px-1.5 py-0.5 rounded truncate max-w-[90%]">
-                        {p?.email?.split("@")[0] || "Interviewer"}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {!hasRoleInfo &&
-              remoteVideoEntries.map(([userId, stream]) => (
-                <div
-                  key={userId}
-                  className="relative rounded-lg overflow-hidden bg-[#0d1117]"
-                >
-                  <RemoteVideo stream={stream} />
-                </div>
-              ))}
-          </>
-        ) : (
-          <div className="flex-1 bg-[#0d1117] rounded-lg flex items-center justify-center min-h-24">
+      {/* Videos — unified equal-size grid, auto-adjusts columns as people join */}
+      <div className="flex-1 p-2 overflow-y-auto">
+        {remoteVideoEntries.length === 0 && (
+          <div className="flex items-center justify-center bg-[#0d1117] rounded-lg py-3 mb-1.5">
             <div className="text-center">
-              <div className="w-10 h-10 bg-[#21262d] rounded-full flex items-center justify-center mx-auto mb-2">
-                <span className="text-lg">👤</span>
+              <div className="w-8 h-8 bg-[#21262d] rounded-full flex items-center justify-center mx-auto mb-1.5">
+                <span className="text-base">👤</span>
               </div>
               <p className="text-xs text-[#484f58]">Waiting for others...</p>
             </div>
           </div>
         )}
 
-        {/* Local video */}
-        <div className="h-24 bg-[#0d1117] rounded-lg overflow-hidden relative shrink-0">
-          <video
-            ref={localVideoRef}
-            autoPlay
-            playsInline
-            muted
-            className="w-full h-full object-cover"
-          />
-          {isCameraOff && (
-            <div className="absolute inset-0 bg-[#0d1117] flex items-center justify-center">
-              <span className="text-xs text-[#484f58]">Camera off</span>
-            </div>
-          )}
-          <span className="absolute bottom-1 left-2 text-xs text-white bg-black/50 px-1.5 py-0.5 rounded">
-            You {isLeadInterviewer && "👑"}
-          </span>
-          {isMuted && (
-            <span className="absolute bottom-1 right-2 text-xs bg-[#da3633] px-1.5 py-0.5 rounded">
-              🔇
-            </span>
-          )}
+        <div className={`grid gap-1.5 ${gridCols}`}>
+          {/* Remote participants */}
+          {remoteVideoEntries.map(([userId, stream]) => {
+            const p = participants.find((p) => p.userId === userId);
+            const label =
+              p?.role === "CANDIDATE"
+                ? "🎯 Candidate"
+                : p?.email?.split("@")[0] || "Interviewer";
+            const camOff = remoteCameraOff[userId];
+            return (
+              <div
+                key={userId}
+                className="relative aspect-video rounded-lg overflow-hidden bg-[#0d1117]"
+              >
+                <RemoteVideoFill stream={stream} />
+                {camOff && <AvatarFallback label={label} />}
+                <span className="absolute bottom-1 left-2 text-xs text-white bg-black/60 px-1.5 py-0.5 rounded truncate max-w-[90%]">
+                  {label}
+                </span>
+              </div>
+            );
+          })}
+
+          {/* Local video — same tile size as remotes */}
+          {(() => {
+            const localLabel = `You${isLeadInterviewer ? " 👑" : ""}`;
+            return (
+              <div className="relative aspect-video rounded-lg overflow-hidden bg-[#0d1117]">
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover"
+                />
+                {isCameraOff && <AvatarFallback label={localLabel} />}
+                <span className="absolute bottom-1 left-2 text-xs text-white bg-black/50 px-1.5 py-0.5 rounded">
+                  {localLabel}
+                </span>
+                {isMuted && (
+                  <span className="absolute bottom-1 right-2 text-xs bg-[#da3633] px-1.5 py-0.5 rounded">
+                    🔇
+                  </span>
+                )}
+              </div>
+            );
+          })()}
         </div>
       </div>
 
@@ -808,8 +807,8 @@ const VideoPanel = ({
   );
 };
 
-// ─── Remote video component ───────────────────────────────────────────────────
-const RemoteVideo = ({ stream, aspectClass = "aspect-video" }) => {
+// Fills whatever grid cell it's placed in — no wrapper div, no fixed aspect ratio.
+const RemoteVideoFill = ({ stream }) => {
   const videoRef = useRef(null);
 
   useEffect(() => {
@@ -819,14 +818,12 @@ const RemoteVideo = ({ stream, aspectClass = "aspect-video" }) => {
   }, [stream]);
 
   return (
-    <div className={`bg-[#0d1117] rounded-lg overflow-hidden ${aspectClass}`}>
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        className="w-full h-full object-cover"
-      />
-    </div>
+    <video
+      ref={videoRef}
+      autoPlay
+      playsInline
+      className="w-full h-full object-cover"
+    />
   );
 };
 
