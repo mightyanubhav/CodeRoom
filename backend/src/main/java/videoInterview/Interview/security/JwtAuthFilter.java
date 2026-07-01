@@ -39,10 +39,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         // 3. Strip "Bearer " prefix and get raw token
         String token = authHeader.substring(7);
 
-        // 4. Validate token
+        // 4. Validate token — if invalid, skip setting auth and continue the chain.
+        // Spring Security's authorization rules will block protected routes.
+        // permitAll() routes (e.g. /api/execute) must still be reachable with
+        // a stale socket token after a client-side refresh.
         if (!jwtUtil.isTokenValid(token)) {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.getWriter().write("Invalid or expired token");
+            filterChain.doFilter(request, response);
             return;
         }
 

@@ -661,8 +661,15 @@ const InterviewRoom = () => {
   const handleLanguageChange = (newLanguage) => {
     setLanguage(newLanguage);
     changeLanguage(roomId, newLanguage);
-    // Don't reset the editor content — the candidate's solution must be preserved
-    // across language switches. Syntax highlighting changes via the language prop.
+
+    const template =
+      starterCodeMapRef.current?.[newLanguage] ||
+      STARTER_TEMPLATES[newLanguage] ||
+      "";
+    setIsRemoteChange(true);
+    setCode(template);
+    sendCodeChange(roomId, template, null);
+    setTimeout(() => setIsRemoteChange(false), 100);
   };
 
   const handleEndInterview = async () => {
@@ -971,7 +978,7 @@ const InterviewRoom = () => {
         <div className="w-80 bg-[#161b22] border-l border-[#30363d] shrink-0 flex flex-col overflow-hidden">
           {/* Video panel */}
           {showVideo && (
-            <div className={`shrink-0 ${isInterviewer() ? "h-64" : "flex-1"}`}>
+            <div className={`shrink-0 ${isInterviewer() ? "h-96" : "flex-1"}`}>
               <VideoPanel
                 roomId={roomId}
                 participants={participants}

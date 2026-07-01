@@ -78,6 +78,17 @@ public class SecurityConfig {
                                                 // ── Everything else needs valid token ─────────
                                                 .anyRequest().authenticated()
                                 )
+                                .exceptionHandling(ex -> ex
+                                                // Without this, Spring Security returns 403 for
+                                                // unauthenticated requests — the frontend interceptor
+                                                // only retries token refresh on 401, so the room
+                                                // join flow would break with stale tokens.
+                                                .authenticationEntryPoint((request, response, authEx) -> {
+                                                        response.setStatus(jakarta.servlet.http.HttpServletResponse.SC_UNAUTHORIZED);
+                                                        response.setContentType("application/json");
+                                                        response.getWriter().write("{\"message\":\"Unauthorized\"}");
+                                                })
+                                )
                                 .addFilterBefore(jwtAuthFilter,
                                                 UsernamePasswordAuthenticationFilter.class);
 

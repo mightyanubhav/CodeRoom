@@ -169,6 +169,18 @@ export const editorHandler = (io, socket) => {
           `📤 Submission in room ${roomId} — ${language} — ${summary}`,
         );
       } catch (err) {
+        if (err.response?.status === 401) {
+          socket.emit("auth:token_expired");
+          io.to(roomId).emit("editor:submission_result", {
+            stdout: "",
+            stderr: "Session expired — token refreshed, please submit again",
+            passed: false,
+            timedOut: false,
+            results: [],
+            isSubmission: true,
+          });
+          return;
+        }
         console.error("editor:submit_code error:", err.message);
         io.to(roomId).emit("editor:submission_result", {
           stdout: "",

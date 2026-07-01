@@ -169,10 +169,12 @@ const VideoPanel = ({
         // Skip only if a healthy connection already exists.
         // "connected" or actively negotiating ("have-local-offer") = don't duplicate.
         // Missing, closed, failed, or stuck-new = safe to (re)try.
-        if (existing &&
-            (existing.connectionState === "connected" ||
-             existing.signalingState === "have-local-offer")) {
-            return;
+        if (
+          existing &&
+          (existing.connectionState === "connected" ||
+            existing.signalingState === "have-local-offer")
+        ) {
+          return;
         }
         const stream = await getUserMedia();
         const pc = createPeerConnection(targetUserId);
@@ -333,7 +335,14 @@ const VideoPanel = ({
     };
 
     setup();
-
+    console.log("VIDEO DEBUG:", {
+      remoteVideoCount: remoteVideoEntries.length,
+      remoteUserIds: remoteVideoEntries.map(([id]) => id),
+      participantCount: participants.length,
+      participantIds: participants.map((p) => p.userId),
+      candidateFound: !!candidateEntry,
+      interviewerCount: interviewerEntries.length,
+    });
     return () => {
       const socket = getSocket();
       if (socket) {

@@ -131,7 +131,7 @@ public class GeminiService {
             - Rate the solution
             - Suggest hints the interviewer can give
             - Be concise and actionable
-            - Never reveal the full solution directly
+            
 
             Respond in clear, structured markdown format.
             """,
